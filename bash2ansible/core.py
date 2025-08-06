@@ -1,4 +1,50 @@
 import re
+
+def parse_bash_script(file_path, config):
+    tasks = []
+    current_command = ""
+    current_umask = "022"
+    variables = {}
+
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+
+    if lines and lines[0].startswith("#!"):
+        if not any(shell in lines[0] for shell in ("bash", "sh")):
+            print(f"⚠️ Skipped: Unsupported shell: {lines[0].strip()}")
+            return []
+
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        if line.endswith("\\"):
+            current_command += line[:-1] + " "
+            continue
+        else:
+            current_command += line
+
+        result = translate_to_ansible(
+            current_command.strip(),
+            config=config,
+            umask=current_umask,
+            variables=variables
+        )
+
+        # internal results
+        if "_umask" in result:
+            current_umask = result["_umask"]
+        elif "_set_var" in result:
+            var, val = result["_set_var"]
+            variables[var] = val
+        else:
+            tasks.append(result)
+
+        current_command = ""
+
+    return tasks
+
 def umask_to_mode(umask: str, is_dir: bool = True):
     """Convert umask (e.g., '0022') to default mode (e.g., '0755')."""
     try:

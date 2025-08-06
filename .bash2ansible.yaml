@@ -1,0 +1,4 @@
+output_format: yaml
+allow_shell_fallback: true
+verbose: false
+strict: false

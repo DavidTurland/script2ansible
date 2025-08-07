@@ -9,9 +9,10 @@ def parse_bash_script(file_path, config):
     with open(file_path, 'r') as file:
         lines = file.readlines()
 
+    import logging
     if lines and lines[0].startswith("#!"):
         if not any(shell in lines[0] for shell in ("bash", "sh")):
-            print(f"⚠️ Skipped: Unsupported shell: {lines[0].strip()}")
+            logging.warning(f"Skipped: Unsupported shell: {lines[0].strip()}")
             return []
 
     for line in lines:
@@ -120,6 +121,21 @@ def translate_to_ansible(command, config=None, umask=None, variables=None):
             }
         }
 
+    # cp SRC DEST
+    cp_match = re.match(r'cp\s+(-[a-zA-Z]+\s+)?(?P<src>\S+)\s+(?P<dest>\S+)', command)
+    if cp_match:
+        src = cp_match.group("src")
+        dest = cp_match.group("dest")
+        return {
+            "name": f"Copy {src} to {dest}",
+            "ansible.builtin.copy": {
+                "src": src,
+                "dest": dest,
+                "remote_src": True
+            }
+        }
+
+
     # ldconfig (no native Ansible module — fallback)
     if re.match(r'ldconfig', command):
         return {
@@ -179,6 +195,29 @@ def translate_to_ansible(command, config=None, umask=None, variables=None):
                 "name": packages,
                 "state": "present",
                 "update_cache": True
+            }
+        }
+    
+    # yum update
+    yum_update_match = re.match(r'yum\s+update(\s+-y)?', command)
+    if yum_update_match:
+        return {
+            "name": "Update YUM package cache",
+            "ansible.builtin.yum": {
+                "name": "*",
+                "state": "latest"
+            }
+        }
+
+    # yum install -y package1 package2
+    yum_install_match = re.match(r'yum\s+install\s+(-y\s+)?(?P<packages>.+)', command)
+    if yum_install_match:
+        packages = yum_install_match.group("packages").split()
+        return {
+            "name": f"Install packages: {' '.join(packages)}",
+            "ansible.builtin.yum": {
+                "name": packages,
+                "state": "present"
             }
         }
 

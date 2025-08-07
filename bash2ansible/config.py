@@ -16,5 +16,6 @@ def load_config():
                 user_config = yaml.safe_load(f)
                 return {**DEFAULT_CONFIG, **(user_config or {})}
             except Exception as e:
-                print(f"Error reading config: {e}")
+                import logging
+                logging.error(f"Error reading config: {e}")
     return DEFAULT_CONFIG

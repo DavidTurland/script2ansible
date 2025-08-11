@@ -6,10 +6,12 @@ import sys
 import yaml
 from pathlib import Path
 import logging
-from .Parser import Parser 
+from .Parser import Parser
+
+
 class PerlParser(Parser):
     # ---------- Perl instrumentation template ----------
-    INSTRUMENTATION_CODE = r'''
+    INSTRUMENTATION_CODE = r"""
 use strict;
 use warnings;
 use JSON;
@@ -74,7 +76,8 @@ END {
     print $fh $json;
     $fh->close;
 }
-'''
+"""
+
     def __init__(self, file_path, config):
         super().__init__(file_path, config)
 
@@ -102,7 +105,6 @@ END {
             json.dump(self.tasks, f, indent=2)
         with open("ansible_tasks.yml", "w") as f:
             yaml.safe_dump(self.tasks, f, sort_keys=False)
-
 
     # ---------- Step 1: Generate instrumented.pl ----------
     def generate_instrumented_perl(self):
@@ -138,48 +140,55 @@ END {
             if t == "file_open":
                 mode = "".join(str(m) for m in d.get("mode", []))
                 if any(m in mode for m in ["w", "a", "+"]):
-                    tasks.append({
-                        "name": f"Ensure file {d.get('file')} exists",
-                        "ansible.builtin.file": {
-                            "path": d.get("file"),
-                            "state": "touch"
+                    tasks.append(
+                        {
+                            "name": f"Ensure file {d.get('file')} exists",
+                            "ansible.builtin.file": {
+                                "path": d.get("file"),
+                                "state": "touch",
+                            },
                         }
-                    })
+                    )
 
             elif t == "mkdir":
-                tasks.append({
-                    "name": f"Create directory {d.get('dir')}",
-                    "ansible.builtin.file": {
-                        "path": d.get("dir"),
-                        "state": "directory",
-                        **({"mode": str(oct(d["mode"]))} if d.get("mode") else {})
+                tasks.append(
+                    {
+                        "name": f"Create directory {d.get('dir')}",
+                        "ansible.builtin.file": {
+                            "path": d.get("dir"),
+                            "state": "directory",
+                            **({"mode": str(oct(d["mode"]))} if d.get("mode") else {}),
+                        },
                     }
-                })
+                )
 
             elif t == "rmdir":
-                tasks.append({
-                    "name": f"Remove directory {d.get('dir')}",
-                    "ansible.builtin.file": {
-                        "path": d.get("dir"),
-                        "state": "absent"
+                tasks.append(
+                    {
+                        "name": f"Remove directory {d.get('dir')}",
+                        "ansible.builtin.file": {
+                            "path": d.get("dir"),
+                            "state": "absent",
+                        },
                     }
-                })
+                )
 
             elif t == "file_delete":
                 for f in d.get("files", []):
-                    tasks.append({
-                        "name": f"Delete file {f}",
-                        "ansible.builtin.file": {
-                            "path": f,
-                            "state": "absent"
+                    tasks.append(
+                        {
+                            "name": f"Delete file {f}",
+                            "ansible.builtin.file": {"path": f, "state": "absent"},
                         }
-                    })
+                    )
 
             elif t == "file_rename":
-                tasks.append({
-                    "name": f"Rename {d.get('from')} to {d.get('to')}",
-                    "ansible.builtin.command": f"mv {d.get('from')} {d.get('to')}"
-                })
+                tasks.append(
+                    {
+                        "name": f"Rename {d.get('from')} to {d.get('to')}",
+                        "ansible.builtin.command": f"mv {d.get('from')} {d.get('to')}",
+                    }
+                )
 
             elif t in ("system_call", "exec_call"):
                 args = d.get("args", [])
@@ -189,31 +198,39 @@ END {
                 cmd_str = " ".join(str(a) for a in args)
 
                 if cmd == "mkdir" and len(args) > 1:
-                    tasks.append({
-                        "name": f"Create directory {args[1]}",
-                        "ansible.builtin.file": {
-                            "path": args[1],
-                            "state": "directory"
+                    tasks.append(
+                        {
+                            "name": f"Create directory {args[1]}",
+                            "ansible.builtin.file": {
+                                "path": args[1],
+                                "state": "directory",
+                            },
                         }
-                    })
+                    )
                 elif cmd == "rm" and len(args) > 1:
-                    tasks.append({
-                        "name": f"Delete file {args[1]}",
-                        "ansible.builtin.file": {
-                            "path": args[1],
-                            "state": "absent"
+                    tasks.append(
+                        {
+                            "name": f"Delete file {args[1]}",
+                            "ansible.builtin.file": {
+                                "path": args[1],
+                                "state": "absent",
+                            },
                         }
-                    })
+                    )
                 elif cmd == "mv" and len(args) > 2:
-                    tasks.append({
-                        "name": f"Rename {args[1]} to {args[2]}",
-                        "ansible.builtin.command": f"mv {args[1]} {args[2]}"
-                    })
+                    tasks.append(
+                        {
+                            "name": f"Rename {args[1]} to {args[2]}",
+                            "ansible.builtin.command": f"mv {args[1]} {args[2]}",
+                        }
+                    )
                 else:
-                    tasks.append({
-                        "name": f"Run command: {cmd_str}",
-                        "ansible.builtin.command": cmd_str
-                    })
+                    tasks.append(
+                        {
+                            "name": f"Run command: {cmd_str}",
+                            "ansible.builtin.command": cmd_str,
+                        }
+                    )
 
             elif t == "external_call":
                 mod = d.get("module")
@@ -221,45 +238,50 @@ END {
                 if mod == "File::Copy" and meth == "copy":
                     src, dst = d.get("args", [None, None])[:2]
                     if src and dst:
-                        tasks.append({
-                            "name": f"Copy {src} to {dst}",
-                            "ansible.builtin.copy": {
-                                "src": src,
-                                "dest": dst
+                        tasks.append(
+                            {
+                                "name": f"Copy {src} to {dst}",
+                                "ansible.builtin.copy": {"src": src, "dest": dst},
                             }
-                        })
+                        )
                 elif mod == "File::Path" and meth == "make_path":
                     for dir_path in d.get("args", []):
-                        tasks.append({
-                            "name": f"Create directory {dir_path}",
-                            "ansible.builtin.file": {
-                                "path": dir_path,
-                                "state": "directory"
+                        tasks.append(
+                            {
+                                "name": f"Create directory {dir_path}",
+                                "ansible.builtin.file": {
+                                    "path": dir_path,
+                                    "state": "directory",
+                                },
                             }
-                        })
+                        )
                 elif mod == "File::Path" and meth == "remove_tree":
                     for dir_path in d.get("args", []):
-                        tasks.append({
-                            "name": f"Remove directory {dir_path}",
-                            "ansible.builtin.file": {
-                                "path": dir_path,
-                                "state": "absent"
+                        tasks.append(
+                            {
+                                "name": f"Remove directory {dir_path}",
+                                "ansible.builtin.file": {
+                                    "path": dir_path,
+                                    "state": "absent",
+                                },
                             }
-                        })
+                        )
                 else:
-                    tasks.append({
-                        "name": f"Call Perl method {meth} in {mod}",
-                        "debug": {
-                            "msg": f"{mod}::{meth} called with args {d.get('args', [])}"
+                    tasks.append(
+                        {
+                            "name": f"Call Perl method {meth} in {mod}",
+                            "debug": {
+                                "msg": f"{mod}::{meth} called with args {d.get('args', [])}"
+                            },
                         }
-                    })
+                    )
 
         return tasks
 
+
 # ---------- Main ----------
 if __name__ == "__main__":
-    import logging
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     if len(sys.argv) < 2:
         logging.error("Usage: process_perl.py <perl_script> [args...]")
         sys.exit(1)
@@ -267,7 +289,7 @@ if __name__ == "__main__":
     original = Path(sys.argv[1])
     instrumented = original.parent / "instrumented.pl"
     log_file = original.parent / "ops_log.json"
-    perl_parser = PerlParser(original,{})
+    perl_parser = PerlParser(original, {})
     perl_parser.generate_instrumented_perl(instrumented)
     output_lines = perl_parser.run_instrumented(instrumented, sys.argv[2:])
 

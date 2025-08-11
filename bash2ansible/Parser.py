@@ -4,4 +4,6 @@ class Parser:
         self.config = config
 
     def parse(self):
-        raise NotImplementedError("Subclasses should implement this method to parse the script.")   
+        raise NotImplementedError(
+            "Subclasses should implement this method to parse the script."
+        )

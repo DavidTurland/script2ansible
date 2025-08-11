@@ -1,5 +1,4 @@
 #!/usr/bin/env perl
-#!/usr/bin/env perl
 my $filename = "/tmp/wibble.txt";
 {
     my $str = 'hello world';

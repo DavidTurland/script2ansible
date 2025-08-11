@@ -4,7 +4,6 @@ import sys
 import json
 import yaml
 import logging
-from .core import translate_to_ansible, parse_bash_script
 from .config import load_config
 from .processors import BashProcessor, SlackRoleProcessor
 

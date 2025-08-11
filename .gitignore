@@ -1,2 +1,8 @@
 __pycache__/
 *~
+venv/
+# run-time artifacts - tidy up
+ops_log.json
+instrumented.pl
+ansible_tasks.json
+ansible_tasks.yml

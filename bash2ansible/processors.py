@@ -2,8 +2,8 @@ from email import generator
 import os
 import sys
 import glob
-from .core import translate_to_ansible, parse_bash_script
-from .generators import build_generator
+from .parsers import ParserFactory
+from .generators import GeneratorFactory
 import shutil
 import logging
 
@@ -20,6 +20,7 @@ class TaskContainer:
 
     def clear_tasks(self):
         self.tasks = []
+        
     def empty(self):
         return len(self.tasks) == 0 
 
@@ -62,7 +63,7 @@ class SlackRoleProcessor(Processor):
             script_name = os.path.join(script_dir,fname)
             if (os.path.isfile(script_name)):
                 logging.info(f"{script_name} found, processing...")
-                task_container.tasks = translate_to_ansible(script_name, self.config)
+                task_container.tasks = parse_script(script_name, self.config)
             self.task_containers.append(task_container)
         files_dir = os.path.join(self.role_dir, 'files')
         task_container = TaskContainer('files')
@@ -80,11 +81,9 @@ class SlackRoleProcessor(Processor):
                 shutil.copyfile(file_name, build_dest_path)
                 # add a build task to copy the file to the ansible role/files
                 task_container.add_task(self.build_ansible_copy(relative_path, dest_path))
-        generator = build_generator(self.config["generator"])
-        if not generator:
-            logging.error(f"Unknown generator type: {self.config['generator']}")
-            sys.exit(1)
-        generator(self, self.config["output_format"])
+        from .generators import GeneratorFactory
+        generator = GeneratorFactory.build_generator(self.config["generator"], self, self.config.get("output_format", "yaml"))
+        generator.generate()
         
     def build_ansible_copy(self, src, dest):
         logging.info(f"build_ansible_copy {src}  to {dest}")
@@ -110,14 +109,8 @@ class BashProcessor(Processor):
     def process(self):
         self.tasks = []
         task_container = TaskContainer('bash_script')
-        task_container.tasks = parse_bash_script(self.file_name, self.config)
-        if task_container.empty():
-            logging.warning("No tasks generated.")
-            sys.exit(0)
-        self.tasks.append(task_container)
+        task_container.tasks = parse_script(self.file_name, self.config)
 
-        generator = build_generator(self.config["generator"])
-        if not generator:
-            logging.error(f"Unknown generator type: {self.config['generator']}")
-            sys.exit(1)
-        generator(self, self.config["output_format"])
+def parse_script(file_path, config):
+    parser = ParserFactory.get_parser(file_path, config)
+    return parser.parse()

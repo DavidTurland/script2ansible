@@ -1,14 +1,12 @@
 # bash2ansible
 
 ## 
-Converts bash scripts to Ansible tasks which can be used to 
-generate Playboos or Role 'task' files
+Converts bash scripts, or perl scripts to Ansible tasks which can be used to 
+generate Playbooks or Role 'task' files
 
 ## 
 Converts slack 'roles' into Ansible Roles
 
-# Thanks to
-ChatGPT 4.1 for turning a whim into code, and helping in the evolution.
 
 
 # Install Locally for Development
@@ -20,7 +18,7 @@ pip install -e .
 Then run:
 
 ```bash
-bash2ansible myscript.sh output.yml
+bash2ansible --type slack --generator role  tests/slack/roles/bar  /tmp/rolly
 ```
 
 Or override config:
@@ -32,7 +30,7 @@ bash2ansible myscript.sh output.json --json --strict
 
 From the root directory (where setup.py is), run:
 ```bash
-python -m bash2ansible.cli input.sh output.yml
+python -m bash2ansible.cli --type slack --generator role  tests/slack/roles/bar  /tmp/rolly
 ```
 ```bash
 python -m bash2ansible.cli input.sh output.json --json

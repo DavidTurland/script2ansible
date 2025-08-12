@@ -1,11 +1,21 @@
-# bash2ansible
+# script2ansible
 
-## 
-Converts bash scripts, or perl scripts to Ansible tasks which can be used to 
-generate Playbooks or Role 'task' files
+Converts all operations in:
+- bash scripts
+- perl scripts 
+to Ansible tasks, which in turn are used to generate playbook or role tasks 
 
-## 
-Converts slack 'roles' into Ansible Roles
+Also knows how to translate slack (https://github.com/jeviolle/slack) roles into new Ansible roles
+- 'scripts' can be either bash or perl
+- 'files' and their required movement are correctly trsnslted to role files, and tasks to copy
+
+
+# Bugs/ Feature requests / Pull Requests
+
+Bugs and feature Request should be raised with the assumption that they may be pasted into CoPilot verbatim. 
+
+
+Pull Requests are also likely better expressed as a chat to copilot which has it respond similarily
 
 
 
@@ -18,22 +28,22 @@ pip install -e .
 Then run:
 
 ```bash
-bash2ansible --type slack --generator role  tests/slack/roles/bar  /tmp/rolly
+scrpt2ansible --type slack --generator role  tests/slack/roles/bar  /tmp/rolly
 ```
 
 Or override config:
 ```bash
-bash2ansible myscript.sh output.json --json --strict
+scrpt2ansible myscript.sh output.json --json --strict
 ```
 
 ## How to Run Without Installing
 
 From the root directory (where setup.py is), run:
 ```bash
-python -m bash2ansible.cli --type slack --generator role  tests/slack/roles/bar  /tmp/rolly
+python -m scrpt2ansible.cli --type slack --generator role  tests/slack/roles/bar  /tmp/rolly
 ```
 ```bash
-python -m bash2ansible.cli input.sh output.json --json
+python -m scrpt2ansible.cli input.sh output.json --json
 ```
 
 ## Example: Bash to Ansible Playbook
@@ -50,7 +60,7 @@ yum install -y httpd
 
 Run the converter:
 ```bash
-python -m bash2ansible.cli myscript.sh playbook.yaml --yaml --type bash --generator playbook
+python -m scrpt2ansible.cli myscript.sh playbook.yaml --type bash --generator playbook
 ```
 
 **Resulting playbook.yaml:**
@@ -77,9 +87,9 @@ python -m bash2ansible.cli myscript.sh playbook.yaml --yaml --type bash --genera
 
 ## testing
 ```bash
-python3 -m bash2ansible.cli --type slack tests/slack/roles/bar /tmp
+python3 -m scrpt2ansible.cli --type slack tests/slack/roles/bar /tmp
 ```
 
 ```bash
-python3 -m bash2ansible.cli --type bash tests/bash/sample1.sh /tmp/floob.yaml
+python3 -m scrpt2ansible.cli --type bash tests/bash/sample1.sh /tmp/floob.yaml
 ```

@@ -92,12 +92,20 @@ class BashParser(Parser):
             dest = cp_match.group("dest")
             return {
                 "name": f"Copy {src} to {dest}",
-                "ansible.builtin.copy": {"src": src, "dest": dest, "remote_src": True},
+                "ansible.builtin.copy": {
+                    "src": src, 
+                    "dest": dest, 
+                    "remote_src": False,
+                },
             }
 
         # ldconfig (no native Ansible module — fallback)
         if re.match(r"ldconfig", command):
-            return {"name": "Run ldconfig", "ansible.builtin.shell": "ldconfig"}
+            return {
+                "name": "Run ldconfig", 
+                "ansible.builtin.shell": 
+                "ldconfig"
+            }
 
         # gunzip file.gz
         if match := re.match(r"gunzip\s+(?P<path>\S+)", command):
@@ -105,7 +113,7 @@ class BashParser(Parser):
                 "name": f"Extract GZ archive {match.group('path')}",
                 "ansible.builtin.unarchive": {
                     "src": match.group("path"),
-                    "remote_src": True,
+                    "remote_src": False,
                     "dest": "/tmp",  # default unless configured
                 },
             }

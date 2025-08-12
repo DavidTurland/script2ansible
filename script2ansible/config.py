@@ -6,11 +6,12 @@ DEFAULT_CONFIG = {
     "allow_shell_fallback": True,
     "verbose": False,
     "strict": False,
+    "perl_custom": "",
 }
 
 
 def load_config():
-    path = ".bash2ansible.yaml"
+    path = ".script2ansible.yaml"
     if os.path.exists(path):
         with open(path, "r") as f:
             try:

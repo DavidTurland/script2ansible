@@ -17,7 +17,36 @@ Bugs and feature Request should be raised with the assumption that they may be p
 
 Pull Requests are also likely better expressed as a chat to copilot which has it respond similarily
 
+# Supported Script Operations
 
+## bash
+The script is parsed
+
+varaible assignment and reference
+```bash
+wibble=hello
+echo "$wibble wobble $wibblewobble"
+```
+
+Result code tets
+```bash
+echo "hello"
+if [[ $? -eq 0 ]]; then
+   echo "that worked so goodbye"
+fi
+```
+commands
+```bash
+cp
+grep
+ln
+```
+
+## Perl
+The script is run and intrinsics and selected package methods are intercepted
+
+```perl
+```
 
 # Install Locally for Development
 ```bash
@@ -28,22 +57,22 @@ pip install -e .
 Then run:
 
 ```bash
-scrpt2ansible --type slack --generator role  tests/slack/roles/bar  /tmp/rolly
+script2ansible --type slack --generator role  tests/slack/roles/bar  /tmp/rolly
 ```
 
 Or override config:
 ```bash
-scrpt2ansible myscript.sh output.json --json --strict
+script2ansible myscript.sh output.json --json --strict
 ```
 
 ## How to Run Without Installing
 
 From the root directory (where setup.py is), run:
 ```bash
-python -m scrpt2ansible.cli --type slack --generator role  tests/slack/roles/bar  /tmp/rolly
+python -m script2ansible.cli --type slack --generator role  tests/slack/roles/bar  /tmp/rolly
 ```
 ```bash
-python -m scrpt2ansible.cli input.sh output.json --json
+python -m script2ansible.cli input.sh output.json --json
 ```
 
 ## Example: Bash to Ansible Playbook
@@ -60,7 +89,7 @@ yum install -y httpd
 
 Run the converter:
 ```bash
-python -m scrpt2ansible.cli myscript.sh playbook.yaml --type bash --generator playbook
+python -m script2ansible.cli myscript.sh playbook.yaml --type bash --generator playbook
 ```
 
 **Resulting playbook.yaml:**
@@ -87,9 +116,9 @@ python -m scrpt2ansible.cli myscript.sh playbook.yaml --type bash --generator pl
 
 ## testing
 ```bash
-python3 -m scrpt2ansible.cli --type slack tests/slack/roles/bar /tmp
+python3 -m script2ansible.cli --type slack tests/slack/roles/bar /tmp
 ```
 
 ```bash
-python3 -m scrpt2ansible.cli --type bash tests/bash/sample1.sh /tmp/floob.yaml
+python3 -m script2ansible.cli --type bash tests/bash/sample1.sh /tmp/floob.yaml
 ```

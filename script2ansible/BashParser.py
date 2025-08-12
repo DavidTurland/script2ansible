@@ -30,7 +30,15 @@ class BashParser(Parser):
 
         return re.sub(r"\$(\w+)\b", replace_var, command)
 
-    def translate_to_ansible(self, command, config=None, umask=None, variables=None):
+    def translate_to_ansible(
+        self,
+        command,
+        config=None,
+        umask=None,
+        variables=None,
+        last_register=None,
+        last_status_cond=None,
+    ):
         config = config or {}
         variables = variables or {}
         allow_shell_fallback = config.get("allow_shell_fallback", True)
@@ -93,19 +101,15 @@ class BashParser(Parser):
             return {
                 "name": f"Copy {src} to {dest}",
                 "ansible.builtin.copy": {
-                    "src": src, 
-                    "dest": dest, 
+                    "src": src,
+                    "dest": dest,
                     "remote_src": False,
                 },
             }
 
         # ldconfig (no native Ansible module — fallback)
         if re.match(r"ldconfig", command):
-            return {
-                "name": "Run ldconfig", 
-                "ansible.builtin.shell": 
-                "ldconfig"
-            }
+            return {"name": "Run ldconfig", "ansible.builtin.shell": "ldconfig"}
 
         # gunzip file.gz
         if match := re.match(r"gunzip\s+(?P<path>\S+)", command):
@@ -176,12 +180,61 @@ class BashParser(Parser):
                 "ansible.builtin.yum": {"name": packages, "state": "present"},
             }
 
+        # echo "text" > file or echo "text" >> file
+        echo_match = re.match(
+            r'echo\s+(?P<text>".*?"|\'.*?\'|[^>]+)\s*(?P<redir>>|>>)\s*(?P<file>\S+)',
+            command,
+        )
+        if echo_match:
+            text = echo_match.group("text")
+            redir = echo_match.group("redir")
+            file = echo_match.group("file")
+            if redir == ">":
+                return {
+                    "name": f"Write text to {file}",
+                    "ansible.builtin.copy": {
+                        "dest": file,
+                        "content": text.strip("\"'"),
+                        "mode": self.umask_to_mode(umask or "022", is_dir=False),
+                    },
+                    "register": "echo_result",
+                }
+            else:  # >>
+                return {
+                    "name": f"Append text to {file}",
+                    "ansible.builtin.lineinfile": {
+                        "path": file,
+                        "line": text.strip("\"'"),
+                        "create": True,
+                        "mode": self.umask_to_mode(umask or "022", is_dir=False),
+                        "insertafter": "EOF",
+                    },
+                    "register": "echo_result",
+                }
+
+        # grep "pattern" file
+        grep_match = re.match(
+            r'grep\s+(?P<pattern>".+?"|\'.+?\'|\S+)\s+(?P<file>\S+)', command
+        )
+        if grep_match:
+            pattern = grep_match.group("pattern")
+            file = grep_match.group("file")
+            return {
+                "name": f"grep for {pattern} in {file}",
+                "shell": f"grep {pattern} {file}",
+                "register": "grep_result",
+            }
+
         # fallback
         if allow_shell_fallback:
-            return {
+            result = {
                 "name": f"Run shell command: {command}",
                 "ansible.builtin.shell": command,
+                "register": "shell_command_result",
             }
+            if last_status_cond:
+                result["when"] = last_status_cond
+            return result
         else:
             return {
                 "name": f"Unsupported command (shell fallback disabled): {command}",
@@ -193,6 +246,8 @@ class BashParser(Parser):
         current_command = ""
         current_umask = "022"
         variables = {}
+        last_register = None
+        last_status_cond = None
 
         with open(self.file_path, "r") as file:
             lines = file.readlines()
@@ -204,22 +259,48 @@ class BashParser(Parser):
                 logging.warning(f"Skipped: Unsupported shell: {lines[0].strip()}")
                 return []
 
-        for line in lines:
-            line = line.strip()
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
             if not line or line.startswith("#"):
+                i += 1
                 continue
 
             if line.endswith("\\"):
                 current_command += line[:-1] + " "
+                i += 1
                 continue
             else:
                 current_command += line
+
+            # Detect if-block for $? test
+            if re.match(
+                r"if\s+\[\[\s+\$\?\s+-eq\s+(\d+)\s*\]\];\s*then", current_command
+            ):
+                status_code = re.search(r"-eq\s+(\d+)", current_command).group(1)
+                # Map $? == 0 to "is succeeded", $? == 1 to "is failed"
+                if status_code == "0":
+                    last_status_cond = f"{last_register} is succeeded"
+                else:
+                    last_status_cond = f"{last_register} is failed"
+                current_command = ""
+                i += 1
+                continue
+
+            # End of if-block
+            if current_command == "fi":
+                last_status_cond = None
+                current_command = ""
+                i += 1
+                continue
 
             result = self.translate_to_ansible(
                 current_command.strip(),
                 config=self.config,
                 umask=current_umask,
                 variables=variables,
+                last_register=last_register,
+                last_status_cond=last_status_cond,
             )
 
             # internal results
@@ -229,8 +310,20 @@ class BashParser(Parser):
                 var, val = result["_set_var"]
                 variables[var] = val
             else:
-                tasks.append(result)
+                # Track register for grep
+                if "register" in result:
+                    last_register = result["register"]
+                # Add when condition if present
+                if "when" in result:
+                    tasks.append(result)
+                else:
+                    # If last_status_cond is set, add it as 'when'
+                    if last_status_cond:
+                        result["when"] = last_status_cond
+                        last_status_cond = None
+                    tasks.append(result)
 
             current_command = ""
+            i += 1
 
         return tasks

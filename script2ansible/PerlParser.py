@@ -11,7 +11,7 @@ from .Parser import Parser
 
 class PerlParser(Parser):
     # ---------- Perl instrumentation template ----------
-    INSTRUMENTATION_CODE = r"""
+    INSTRUMENTATION_CODE_PREFIX = r"""
 use strict;
 use warnings;
 use JSON;
@@ -27,14 +27,14 @@ sub log_op {
 BEGIN {
     no warnings 'redefine';
     *CORE::GLOBAL::open = sub (*;$@) {
-        my ($fh, $file, @rest) = @_;
-        log_op("file_open", file => $file, mode => \@rest);
+        my ($fh, $mode, $file, @rest) = @_;
+        log_op("file_open", file => $file, mode => $mode, rest => \@rest);
         # If $fh is a string, convert to symbol ref
         if (!ref $fh) {
             no strict 'refs';
-            return CORE::open(*{$fh}, $file, @rest);
+            return CORE::open(*{$fh},  $mode, $file, @rest);
         } else {
-            return CORE::open($fh, $file, @rest);
+            return CORE::open($fh,  $mode, $file, @rest);
         }
     };
     *CORE::GLOBAL::rename = sub {
@@ -58,15 +58,17 @@ BEGIN {
         return CORE::exec(@args);
     };
 }
+"""
+    INSTRUMENTATION_CODE_SUFFIX = r"""
 
 # Wrap require to log external package usage
 BEGIN {
     no warnings 'redefine';
     *CORE::GLOBAL::require = sub {
-        my $module = $_[0];
-        my $res = CORE::require($module);
+        my ($module) = @_;
+        #my $res = CORE::require($module);
         log_op("module_load", module => $module);
-        return $res;
+        #return $res;
     };
 }
 
@@ -85,6 +87,9 @@ END {
         self.instrumented_path = original.parent / "instrumented.pl"
         self.log_path = original.parent / "ops_log.json"
         self.log_path = "/tmp/ops_log.json"
+        self.INSTRUMENTATION_CODE_CUSTOM = (
+            config["perl_custom"] if "perl_custom" in config else ""
+        )
 
     def parse(self):
         logging.info("Generating instrumented Perl script...")
@@ -111,7 +116,15 @@ END {
         with open(self.file_path, "r") as f:
             original_code = f.read()
 
-        instrumented_code = self.INSTRUMENTATION_CODE + "\n" + original_code
+        instrumented_code = (
+            self.INSTRUMENTATION_CODE_PREFIX
+            + "\n"
+            + self.INSTRUMENTATION_CODE_CUSTOM
+            + "\n"
+            + self.INSTRUMENTATION_CODE_SUFFIX
+            + "\n"
+            + original_code
+        )
 
         with open(self.instrumented_path, "w") as f:
             f.write(instrumented_code)

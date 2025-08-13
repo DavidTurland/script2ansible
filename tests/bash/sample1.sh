@@ -14,4 +14,7 @@ apt install -y foo floob
 apt install bar
 apt update
 apt-get update
+if [ $? -eq 0 ]; then
+   echo "Either mycommand failed or <foo failed"
+fi
  # hmm

@@ -2,12 +2,13 @@
 
 Converts all operations in:
 - bash scripts
-- perl scripts 
-to Ansible tasks, which in turn are used to generate playbook or role tasks 
+- perl scripts
+
+to Ansible tasks, which in turn are used to generate Ansible playbooks or Ansible role tasks 
 
 Also knows how to translate slack (https://github.com/jeviolle/slack) roles into new Ansible roles
 - 'scripts' can be either bash or perl
-- 'files' and their required movement are correctly trsnslted to role files, and tasks to copy
+- 'files' and their required movement are correctly translated to role files, with the corresponding task to copy
 
 
 # Bugs/ Feature requests / Pull Requests
@@ -15,20 +16,20 @@ Also knows how to translate slack (https://github.com/jeviolle/slack) roles into
 Bugs and feature Request should be raised with the assumption that they may be pasted into CoPilot verbatim. 
 
 
-Pull Requests are also likely better expressed as a chat to copilot which has it respond similarily
+Pull Requests are also likely better expressed as a chat to copilot which would have it respond similarily.
 
 # Supported Script Operations
 
 ## bash
-The script is parsed
+Bash scripts are visited using bashlex
 
-varaible assignment and reference
+variable assignment and reference
 ```bash
 wibble=hello
 echo "$wibble wobble $wibblewobble"
 ```
 
-Result code tets
+Result-code tests
 ```bash
 echo "hello"
 if [[ $? -eq 0 ]]; then
@@ -43,9 +44,25 @@ ln
 ```
 
 ## Perl
-The script is run and intrinsics and selected package methods are intercepted
+The script is run, and intrinsics, and selected package methods are intercepted
 
 ```perl
+```
+$NOTE$: custom package methods can be added to ./.scrip2ansible.yaml
+```perl
+use Org::Turland::Helpers;
+my @floobs = ('wibble',);
+Org::Turland::Helpers::do_that_thing(@floobs);
+```
+```yaml
+perl_custom: |
+  BEGIN {
+      package Org:Turland:Helpers;
+      sub do_that_thing {
+          ::log_op("do_that_thing", floobs => \@_);
+          return;
+      }
+  }
 ```
 
 # Install Locally for Development
@@ -54,15 +71,11 @@ The script is run and intrinsics and selected package methods are intercepted
 pip install -e .
 ```
 
-Then run:
+# Usage
+
 
 ```bash
 script2ansible --type slack --generator role  tests/slack/roles/bar  /tmp/rolly
-```
-
-Or override config:
-```bash
-script2ansible myscript.sh output.json --json --strict
 ```
 
 ## How to Run Without Installing
@@ -116,9 +129,9 @@ python -m script2ansible.cli myscript.sh playbook.yaml --type bash --generator p
 
 ## testing
 ```bash
-python3 -m script2ansible.cli --type slack tests/slack/roles/bar /tmp
+python3 -m script2ansible.cli --type slack -generator role_tasks tests/slack/roles/bar /tmp
 ```
 
 ```bash
-python3 -m script2ansible.cli --type bash tests/bash/sample1.sh /tmp/floob.yaml
+python3 -m script2ansible.cli --type bash --generator playbook tests/bash/sample1.sh /tmp/floob.yaml
 ```

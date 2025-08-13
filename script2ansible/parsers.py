@@ -1,7 +1,8 @@
 import logging
 
 from .PerlParser import PerlParser
-from .BashParser import BashParser
+# from .BashParser import BashParser
+from .BashLexParser import BashLexParser as BashParser
 
 
 class ParserFactory:

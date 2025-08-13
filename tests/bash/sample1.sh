@@ -17,4 +17,11 @@ apt-get update
 if [ $? -eq 0 ]; then
    echo "Either mycommand failed or <foo failed"
 fi
- # hmm
+if [  "$foo" -eq "wibble" ]; then
+   echo "they are the same"
+   apt install doobydo
+fi
+
+if [ $? -eq 0 ]; then
+   apt install flimble
+fi

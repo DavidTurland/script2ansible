@@ -57,6 +57,50 @@ BEGIN {
         log_op("exec_call", args => \@args);
         return CORE::exec(@args);
     };
+    *CORE::GLOBAL::mkdir = sub {
+        my ($dir, $mode) = @_;
+        log_op("mkdir", dir => $dir, mode => $mode);
+        return CORE::mkdir($dir, $mode);
+    };
+    *CORE::GLOBAL::rmdir = sub {
+        my ($dir) = @_;
+        log_op("rmdir", dir => $dir);
+        return CORE::rmdir($dir);
+    };
+    # Wrap File::Path::make_path
+    {
+        no warnings 'redefine';
+        require File::Path;
+        *File::Path::make_path = sub {
+            my @dirs = @_;
+            ::log_op("external_call", module => "File::Path", method => "make_path", args => [@dirs]);
+            # return File::Path::make_path(@dirs);
+            return;
+        };
+    }
+    # Wrap File::Path::remove_tree
+    {
+        no warnings 'redefine';
+        require File::Path;
+        *File::Path::remove_tree = sub {
+            my @dirs = @_;
+            ::log_op("external_call", module => "File::Path", method => "remove_tree", args => [@dirs]);
+            # return File::Path::remove_tree(@dirs);
+            return;
+        };
+    }
+    # Wrap File::Copy::copy
+    {
+        no warnings 'redefine';
+        require File::Copy;
+        *File::Copy::copy = sub {
+            my ($src, $dest) = @_;
+            ::log_op("external_call", module => "File::Copy", method => "copy", args => [$src, $dest]);
+            # return File::Copy::copy($src, $dest);
+            return;
+        }; 
+    }
+
 }
 """
     INSTRUMENTATION_CODE_SUFFIX = r"""
@@ -79,17 +123,16 @@ END {
     $fh->close;
 }
 """
-
-    def __init__(self, file_path, config):
-        super().__init__(file_path, config)
-
-        original = Path(self.file_path)
-        self.instrumented_path = original.parent / "instrumented.pl"
-        self.log_path = original.parent / "ops_log.json"
+    def __init__(self, file_path=None, script_string=None, config=None):
+        super().__init__(file_path=file_path, config=config, script_string=script_string)
+        if self.file_path:
+            original = Path(self.file_path)
+            self.instrumented_path = original.parent / "instrumented.pl"
+        else:
+            self.instrumented_path = Path("/tmp/instrumented.pl")
+        # self.log_path = original.parent / "ops_log.json"
         self.log_path = "/tmp/ops_log.json"
-        self.INSTRUMENTATION_CODE_CUSTOM = (
-            config["perl_custom"] if "perl_custom" in config else ""
-        )
+        self.INSTRUMENTATION_CODE_CUSTOM = config.get("perl_custom", "")
 
     def parse(self):
         logging.info("Generating instrumented Perl script...")
@@ -111,10 +154,18 @@ END {
         with open("ansible_tasks.yml", "w") as f:
             yaml.safe_dump(self.tasks, f, sort_keys=False)
 
+
+
+
+
     # ---------- Step 1: Generate instrumented.pl ----------
     def generate_instrumented_perl(self):
-        with open(self.file_path, "r") as f:
-            original_code = f.read()
+
+        if self.file_path:
+            with open(self.file_path, "r") as file:
+                original_code = file.read()
+        else:
+            original_code = self.script_string
 
         instrumented_code = (
             self.INSTRUMENTATION_CODE_PREFIX

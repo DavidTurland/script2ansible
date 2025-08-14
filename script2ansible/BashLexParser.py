@@ -36,8 +36,8 @@ class TestVisitor(ast.nodevisitor):
         elif ('-ge' == self.op):
             result =  (self.arg_lhs  >= self.arg_rhs)
             result_str = self.arg_lhs  + " >= " + self.arg_rhs
-        return (test_return_code, result)
-    
+        return (test_return_code, result, result_str)
+
     def __str__(self):
         return (f"TestVisitor(op={self.op}, arg_lhs={self.arg_lhs}, arg_rhs={self.arg_rhs})")
     def visitlist(self, n, parts):
@@ -137,8 +137,9 @@ class BashNodeVisitor(ast.nodevisitor):
             elif part.kind == 'redirect':
                 # Only handle > and >> for echo
                 if part.type in ('>', '>>'):
+                    # breakpoint()  # Debugging point
                     redir_type = part.type
-                    redir_file = part.input.word
+                    redir_file = part.output.word
             else:
                 # Recursively visit other nodes
                 self.visit(part)
@@ -286,7 +287,7 @@ class BashNodeVisitor(ast.nodevisitor):
                 },
                 "register": self.get_register_name("apt_install"),
             })
-            print(f"Installing packages: {pkgs}")
+            # print(f"Installing packages: {pkgs}")
             return False
 
         # yum update
@@ -360,9 +361,8 @@ class BashNodeVisitor(ast.nodevisitor):
             self.tasks.append({
                 "name": f"Run shell command: {command_str}",
                 "shell": command_str,
-                "register": "last_result"
+                "register": self.get_register_name(cmd),
             })
-            self.last_register = "last_result"
 
         return False
 
@@ -370,7 +370,10 @@ class BashNodeVisitor(ast.nodevisitor):
         # Only support two forms:
         # 1. if [ $? -eq 0 ]; then ... fi
         # 2. if [ "$foo" -eq "wibble" ]; then ... fi
-        # The test is in n.parts[0], body is n.parts[1:]
+        # The test is in n.parts[1], 
+        #    body is n.parts[3:]
+        print("x" * 80)
+        print (n.dump())
         test_node = n.parts[1] # ListNode
         body_nodes = n.parts[3:]
         when_cond = None
@@ -379,15 +382,16 @@ class BashNodeVisitor(ast.nodevisitor):
         tv = TestVisitor()
         tv.visit(test_node)
         print(tv)
-        
-        (test_return_code, result) = tv.test()
+
+        (test_return_code, result, result_str) = tv.test()
+        print(f"Test result: {result}, return code: {test_return_code}, result_str: {result_str}")
         if test_return_code:
             if result:
                 when_cond = f"{self.last_register} is succeeded"
             else:
                 when_cond = f"{self.last_register} is failed"
         else:
-            when_cond = result
+            when_cond = result_str
 
         # Visit body and add 'when' to each task generated
         before_len = len(self.tasks)
@@ -399,9 +403,8 @@ class BashNodeVisitor(ast.nodevisitor):
         return False
 
 class BashLexParser(Parser):
-    def __init__(self, file_path, config):
-        super().__init__(file_path, config)
-
+    def __init__(self, file_path=None, script_string=None, config=None):
+        super().__init__(file_path=file_path, config=config, script_string=script_string)
     def parse(self):
         """
         https://github.com/idank/bashlex/blob/master/examples/commandsubstitution-remover.py
@@ -415,11 +418,11 @@ class BashLexParser(Parser):
         with open(self.file_path, "r") as file:
             source = file.read()
         # breakpoint()
-        print(f"Parsing {self.file_path} with BashLexParser")
+        #print(f"Parsing {self.file_path} with BashLexParser")
         trees = parser.parse(source)
-        for tree in trees:
-            print("" * 80)
-            print (tree.dump())
+        #for tree in trees:
+        #    print("" * 80)
+        #    print (tree.dump())
         visitor = BashNodeVisitor(tasks)
         for tree in trees:
             visitor.visit(tree)

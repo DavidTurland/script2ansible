@@ -1,10 +1,11 @@
 import re
+import logging
 from .Parser import Parser
 
 
 class BashParser(Parser):
-    def __init__(self, file_path, config):
-        super().__init__(file_path, config)
+    def __init__(self, file_path=None, script_string=None, config=None):
+        super().__init__(file_path=file_path, config=config, script_string=script_string)
 
     def umask_to_mode(self, umask: str, is_dir: bool = True):
         """Convert umask (e.g., '0022') to default mode (e.g., '0755')."""
@@ -248,11 +249,16 @@ class BashParser(Parser):
         variables = {}
         last_register = None
         last_status_cond = None
+        if self.file_path:
+            with open(self.file_path, "r") as file:
+                lines = file.readlines()
+        elif self.script_string:
+            lines = self.script_string.splitlines()
+        else:
+            return []
 
-        with open(self.file_path, "r") as file:
-            lines = file.readlines()
 
-        import logging
+
 
         if lines and lines[0].startswith("#!"):
             if not any(shell in lines[0] for shell in ("bash", "sh")):

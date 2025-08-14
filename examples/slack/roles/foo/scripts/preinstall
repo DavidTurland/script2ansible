@@ -17,6 +17,6 @@ apt-get update
  # hmm
 ssh_config=/tmp/dooby.txt
 echo "hello" >> $ssh_config
-if [[ $? -eq 0 ]]; then
+if [ $? -eq 0 ]; then
    echo "Either mycommand failed or <foo failed"
 fi

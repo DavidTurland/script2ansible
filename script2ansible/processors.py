@@ -64,12 +64,13 @@ class SlackRoleProcessor(Processor):
     def process(self):
         self.task_containers = []
         script_dir = os.path.join(self.role_dir, "scripts")
-        for fname in ("preinstall", "postinstall"):
+        for fname in ("fixfiles", "preinstall", "postinstall"):
             task_container = TaskContainer(fname)
             script_name = os.path.join(script_dir, fname)
             if os.path.isfile(script_name):
                 logging.info(f"{script_name} found, processing...")
-                task_container.tasks = parse_script(script_name, self.config)
+                parser = ParserFactory.get_parser(file_path=script_name, config=self.config)
+                task_container.tasks = parser.parse()
             self.task_containers.append(task_container)
         files_dir = os.path.join(self.role_dir, "files")
         task_container = TaskContainer("files")
@@ -119,7 +120,8 @@ class BashProcessor(Processor):
         self.task_containers = []
         self.tasks = []
         task_container = TaskContainer("bash_script")
-        task_container.tasks = parse_script(self.file_name, self.config)
+        parser = ParserFactory.get_parser(file_path=self.file_name, config=self.config)
+        task_container.tasks = parser.parse()
         self.task_containers.append(task_container)
         generator = GeneratorFactory.build_generator(
             self.config["generator"], self, self.config.get("output_format", "yaml")
@@ -127,6 +129,4 @@ class BashProcessor(Processor):
         generator.generate()
 
 
-def parse_script(file_path, config):
-    parser = ParserFactory.get_parser(file_path, config)
-    return parser.parse()
+

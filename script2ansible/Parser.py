@@ -1,6 +1,7 @@
 class Parser:
-    def __init__(self, file_path, config):
+    def __init__(self, file_path=None, script_string=None, config=None):
         self.file_path = file_path
+        self.script_string = script_string
         self.config = config
         self.register_names = {}
 

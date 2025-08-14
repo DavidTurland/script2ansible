@@ -8,7 +8,31 @@ class GeneratorRole:
         self.processor = processor
         self.output_format = output_format
 
+    def create_role_structure(self):
+        """Create standard directories and stub files for an Ansible role."""
+        role_dir = self.processor.get_output_dir()
+        dirs = [
+            "tasks",
+            "handlers",
+            "files",
+            "templates",
+            "vars",
+            "defaults",
+            "meta",
+        ]
+        for d in dirs:
+            os.makedirs(os.path.join(role_dir, d), exist_ok=True)
+        # Create stub main.yml files if not present
+        stub_content = "# This is a stub file for Ansible role\n"
+        for d in ["tasks", "handlers", "vars", "defaults", "meta"]:
+            stub_file = os.path.join(role_dir, d, "main.yml")
+            if not os.path.exists(stub_file):
+                with open(stub_file, "w") as f:
+                    f.write(stub_content)
+
     def generate(self):
+        breakpoint()
+        self.create_role_structure()
         task_containers = self.processor.get_tasks()
         tasks_dir = os.path.join(self.processor.get_output_dir(), "tasks")
         os.makedirs(tasks_dir, exist_ok=True)

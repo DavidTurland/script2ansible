@@ -88,6 +88,11 @@ python -m script2ansible.cli --type slack --generator role  tests/slack/roles/ba
 python -m script2ansible.cli input.sh output.json --json
 ```
 
+# Unit Tests
+```python
+python -m unittest discover -s /mnt/backup/_dev/script2ansible/tests
+```
+
 ## Example: Bash to Ansible Playbook
 
 Suppose you have a simple bash script:
@@ -128,10 +133,16 @@ python -m script2ansible.cli myscript.sh playbook.yaml --type bash --generator p
 ```
 
 ## testing
+
 ```bash
-python3 -m script2ansible.cli --type slack -generator role_tasks tests/slack/roles/bar /tmp
+python3 -m script2ansible.cli --type slack --generator role examples/slack/roles/bar /tmp
+```
+
+
+```bash
+python3 -m script2ansible.cli --type slack -generator role_tasks examples/slack/roles/bar /tmp
 ```
 
 ```bash
-python3 -m script2ansible.cli --type bash --generator playbook tests/bash/sample1.sh /tmp/floob.yaml
+python3 -m script2ansible.cli --type bash --generator playbook examples/bash/sample1.sh /tmp/floob.yaml
 ```

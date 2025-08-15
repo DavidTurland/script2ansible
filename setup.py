@@ -1,17 +1,17 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="bash2ansible",
+    name="script2ansible",
     version="0.1.0",
     packages=find_packages(),
     install_requires=["PyYAML", "bashlex"],
     entry_points={
         "console_scripts": [
-            "bash2ansible = bash2ansible.cli:main"
+            "script2ansible = script2ansible.cli:main"
         ]
     },
-    author="Your Name",
-    description="Convert bash scripts into Ansible playbooks using built-in modules",
+    author="David Turland",
+    description="Convert Perl,Bash scripts into Ansible playbooks, or Roles, using built-in modules",
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License"

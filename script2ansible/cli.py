@@ -7,7 +7,7 @@ from .processors import BashProcessor, SlackRoleProcessor
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Translate Bash script into an Ansible playbook."
+        description="Translate Perl or Bash scripts into an Ansible playbook."
     )
     parser.add_argument("input", help="Input  - its complicated")
     parser.add_argument("output", help="Output  - its complicated")
@@ -18,9 +18,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--type",
-        choices=["bash", "slack"],
-        default="bash",
-        help="type of thing to process (bash or slack)",
+        choices=["script", "slack"],
+        default="script",
+        help="type of thing to process (Perl/bash or slack)",
     )
     parser.add_argument(
         "--generator",
@@ -28,6 +28,10 @@ if __name__ == "__main__":
         default="role",
         help="type of thing to generate (role or playbook)",
     )
+
+    parser.add_argument("role_name", help="ansible role name - overrides implied or defines when missing ")
+
+
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
     args = parser.parse_args()
@@ -85,7 +89,7 @@ if __name__ == "__main__":
             raise ValueError(
                 f"Input path {args.input} is not a directory for Slack role processing."
             )
-    elif args.type == "bash":
+    elif args.type == "script":
         if os.path.isfile(config["input"]):
             processor = BashProcessor(config["input"], config)
             processor.process()

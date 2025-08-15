@@ -54,5 +54,67 @@ class TestPerlParser(unittest.TestCase):
         self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/dir1")
         self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/dir2")
 
+    # def test_parser_use(self):
+    #     parser = PerlParser(script_string="use Org::Turland::Helpers; \n Org::Turland::Helpers::do_that_thing((a => 'b'));", config={})       
+    #     self.assertEqual(parser.instrumentation_packages,{'Org::Turland::Helpers'})
+    #     parser.generate_instrumented_perl()
+    #     contains_commented_use = any('# use Org::Turland::Helpers' in s for s in parser.instrumented_code.splitlines())
+    #     self.assertTrue(contains_commented_use,'commented use in generated code')
+    #     tasks = parser.parse()
+    #     breakpoint()
+
+    def test_parser_custom(self):
+        parser = PerlParser(script_string="""
+            use Org::Turland::Custom qw(file_state); 
+            Org::Turland::Custom::file_state((path => '/tmp/wibble.txt'));
+            file_state((path => '/tmp/wobble.txt'));
+            """, config={})       
+        self.assertEqual(parser.instrumentation_packages,{'Org::Turland::Custom'})
+        tasks = parser.parse()
+        #breakpoint()
+        self.assertEqual(len(tasks),2, "just the two tasks")
+        self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
+        self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
+
+    def test_parser_local_package(self):
+        config = {
+            "perl_custom" : """
+BEGIN {
+        package Org::Turland::Local;
+        # sample package which need not exist at parse-time
+        no warnings 'redefine';
+        use Exporter qw(import);
+        our @EXPORT_OK = qw(file_state);
+        *Org::Turland::Local::file_state = sub {
+            my (%args) = @_;
+            my $path = $args{path};
+            my $state = $args{state} // 'absent';
+            my $params = $args{params} // { sudo => 1 };
+            my $task = { name => 'file_state',
+                         task => 'ansible.builtin.file',
+                         task_params => {
+                                path => $path ,
+                                state => $state,
+                            },
+                         params => $params,
+                    };
+            ::log_task("custom", $task);
+            return;
+        };
+    }
+"""
+        }
+        parser = PerlParser(script_string="""
+            use Org::Turland::Local qw(file_state); 
+            Org::Turland::Local::file_state((path => '/tmp/wibble.txt'));
+            file_state((path => '/tmp/wobble.txt'));
+            """, config=config)       
+        self.assertEqual(parser.instrumentation_packages,{'Org::Turland::Local','Org::Turland::Custom'})
+        tasks = parser.parse()
+        #breakpoint()
+        self.assertEqual(len(tasks),2, "just the two tasks")
+        self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
+        self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
+
 if __name__ == "__main__":
     unittest.main()

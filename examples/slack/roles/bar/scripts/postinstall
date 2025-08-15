@@ -1,12 +1,15 @@
 #!/usr/bin/env perl
+use Org::Turland::Local qw(file_state); 
+Org::Turland::Local::file_state((path => '/tmp/wibble.txt'));
+file_state((path => '/tmp/wobble.txt'));
 
 my $filename = "/tmp/wibble.txt";
 {
     my $str = 'hello world';
     my $fh = IO::File->new($filename, "w");
-    print $fh $str;
-    rename($filename, "/tmp/wibble_renamed.txt") or die "Could not rename file: $!";
+    print $fh $str;    
     $fh->close;
+    rename($filename, "/tmp/wibble_renamed.txt") or die "Could not rename file: $!";
 }
 {
     open(FH, '>', $filename) or die "Could not open file '$filename' $!";

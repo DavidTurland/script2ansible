@@ -34,7 +34,7 @@ class TestBashLexParser(unittest.TestCase):
         os.remove(self.test_script_path)
 
     def test_parse_basic_commands(self):
-        parser = BashLexParser(self.test_script_path, {})
+        parser = BashLexParser(file_path=self.test_script_path, config={})
         tasks = parser.parse()
         # Check mkdir task
         self.assertTrue(any(t.get("ansible.builtin.file", {}).get("state") == "directory" for t in tasks))
@@ -56,7 +56,7 @@ class TestBashLexParser(unittest.TestCase):
         self.assertTrue(any("ansible.builtin.copy" in t or "ansible.builtin.lineinfile" in t for t in tasks))
 
     def test_if_result_code(self):
-        parser = BashLexParser(self.test_script_path, {})
+        parser = BashLexParser(file_path=self.test_script_path, config= {})
         tasks = parser.parse()
         # Find the touch task with a 'when' condition
         touch_tasks = [t for t in tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
@@ -65,7 +65,7 @@ class TestBashLexParser(unittest.TestCase):
         self.assertTrue(any("is succeeded" in t.get("when", "") or "is failed" in t.get("when", "") for t in touch_tasks))
 
     def test_if_variable_comparison(self):
-        parser = BashLexParser(self.test_script_path, {})
+        parser = BashLexParser(file_path=self.test_script_path, config={})
         tasks = parser.parse()
         # breakpoint()
         # Find the echo task with a 'when' condition for variable comparison

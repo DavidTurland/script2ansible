@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import yaml
+import re
 from pathlib import Path
 import logging
 from .Parser import Parser
@@ -18,9 +19,13 @@ use JSON;
 use IO::File;
 
 my @OPS;
+sub log_task {
+    my ($type, $refdata) = @_;
+        push @OPS, { type => $type, data => $refdata };
+}
 sub log_op {
     my ($type, %data) = @_;
-    push @OPS, { type => $type, %data };
+        push @OPS, { type => $type, %data };
 }
 
 # Wrap file operations
@@ -36,6 +41,13 @@ BEGIN {
         } else {
             return CORE::open($fh,  $mode, $file, @rest);
         }
+    };
+    *CORE::GLOBAL::close = sub (*) {
+        my ($fh) = @_;
+        log_op("file_close", fh => $fh);
+        # TODO:
+        # maybe close, do something with the file?
+        return CORE::close($fh);
     };
     *CORE::GLOBAL::rename = sub {
         my ($from, $to) = @_;
@@ -102,6 +114,29 @@ BEGIN {
     }
 
 }
+BEGIN {
+        package Org::Turland::Custom;
+        # sample package which need not exist at parse-time
+        no warnings 'redefine';
+        use Exporter qw(import);
+        our @EXPORT_OK = qw(file_state);
+        *Org::Turland::Custom::file_state = sub {
+            my (%args) = @_;
+            my $path = $args{path};
+            my $state = $args{state} // 'absent';
+            my $params = $args{params} // { sudo => 1 };
+            my $task = { name => 'file_state',
+                         task => 'ansible.builtin.file',
+                         task_params => {
+                                path => $path ,
+                                state => $state,
+                            },
+                         params => $params,
+                    };
+            ::log_task("custom", $task);
+            return;
+        };
+    }
 """
     INSTRUMENTATION_CODE_SUFFIX = r"""
 
@@ -133,6 +168,7 @@ END {
         # self.log_path = original.parent / "ops_log.json"
         self.log_path = "/tmp/ops_log.json"
         self.INSTRUMENTATION_CODE_CUSTOM = config.get("perl_custom", "")
+        self.process_instrumentation()
 
     def parse(self):
         logging.info("Generating instrumented Perl script...")
@@ -149,15 +185,43 @@ END {
         logging.info(f"Parsed {len(self.tasks)} Ansible tasks from Perl ops log.")
         return self.tasks
         # Save JSON and YAML
-        with open("ansible_tasks.json", "w") as f:
-            json.dump(self.tasks, f, indent=2)
-        with open("ansible_tasks.yml", "w") as f:
-            yaml.safe_dump(self.tasks, f, sort_keys=False)
+        # with open("ansible_tasks.json", "w") as f:
+        #     json.dump(self.tasks, f, indent=2)
+        # with open("ansible_tasks.yml", "w") as f:
+        #     yaml.safe_dump(self.tasks, f, sort_keys=False)
 
+    def process_instrumentation(self):
+        # find all package declarations in instrumentation_code
+        self.instrumentation_code = (
+            self.INSTRUMENTATION_CODE_PREFIX
+            + "\n"
+            + self.INSTRUMENTATION_CODE_CUSTOM
+            + "\n"
+            + self.INSTRUMENTATION_CODE_SUFFIX       
+        )
+        self.instrumentation_packages = set()
+        for match in re.finditer(r'^\s*package\s+([A-Za-z0-9_:]+)', self.instrumentation_code, re.MULTILINE):
+            pkg = match.group(1)
+            self.instrumentation_packages.add(pkg)
 
-
-
-
+    def preprocess_code(self,original_code):
+        return original_code
+        original_lines = original_code.splitlines()
+        commented_lines = []
+        # Comment out lines in original_code that use any instrumentation package
+        for line in original_lines:
+            matched = False
+            for pkg in self.instrumentation_packages:
+                # Match 'use Package::Name;' possibly with whitespace
+                if re.match(rf'^\s*use\s+{re.escape(pkg)}\s*;', line):
+                    commented_lines.append(f"# {line}")
+                    matched = True
+                    break
+            if not matched:
+                commented_lines.append(line)
+        preprocessed_code = "\n".join(commented_lines)  
+        return preprocessed_code
+            
     # ---------- Step 1: Generate instrumented.pl ----------
     def generate_instrumented_perl(self):
 
@@ -167,18 +231,16 @@ END {
         else:
             original_code = self.script_string
 
-        instrumented_code = (
-            self.INSTRUMENTATION_CODE_PREFIX
+        preprocessed_code = self.preprocess_code(original_code)
+
+        self.instrumented_code = (
+            self.instrumentation_code
             + "\n"
-            + self.INSTRUMENTATION_CODE_CUSTOM
-            + "\n"
-            + self.INSTRUMENTATION_CODE_SUFFIX
-            + "\n"
-            + original_code
+            + preprocessed_code
         )
 
         with open(self.instrumented_path, "w") as f:
-            f.write(instrumented_code)
+            f.write(self.instrumented_code)
 
     # ---------- Step 2: Run instrumented.pl and capture output ----------
     def run_instrumented(self, args):
@@ -339,7 +401,23 @@ END {
                             },
                         }
                     )
-
+            elif t == "custom":
+                # breakpoint()  # For debugging custom operations
+                """
+                With custom types the json is already structured as
+                an ansible task and just needs fluffing out
+                """
+                data = d.get("data")
+                task_type = data.get("task")
+                task_params = data.get("task_params", {})
+                params= data.get("params", {})
+                name = data.get("name", f"Custom task {task_type}")
+                task = {
+                    "name": name,
+                }
+                task[task_type] = task_params
+                task = task | params
+                tasks.append(task)
         return tasks
 
 

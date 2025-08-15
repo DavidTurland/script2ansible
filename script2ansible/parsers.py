@@ -12,9 +12,9 @@ class ParserFactory:
         if file_path:
             # Check file extension first
             if file_path.endswith(".pl"):
-                return PerlParser(file_path, config)
+                return PerlParser(file_path=file_path, config=config)
             elif file_path.endswith(".sh") or file_path.endswith(".bash"):
-                return BashParser(file_path, config)
+                return BashParser(file_path=file_path, config=config)
             try:
                 with open(file_path, "r") as f:
                     first_line = f.readline()
@@ -27,9 +27,9 @@ class ParserFactory:
 
         if first_line.startswith("#!"):
             if "perl" in first_line:
-                return PerlParser(file_path, config)
+                return PerlParser(file_path=file_path, config=config)
             elif "bash" in first_line or "sh" in first_line:
-                return BashParser(file_path, config)
+                return BashParser(file_path=file_path, config=config)
 
         # Default to BashParser
-        return BashParser(file_path, config)
+        return BashParser(file_path=file_path, config=config)

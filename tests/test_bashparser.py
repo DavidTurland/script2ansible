@@ -46,7 +46,7 @@ class TestBashParser(unittest.TestCase):
         self.assertTrue(any("register" in t for t in tasks))
 
     def test_if_result_code(self):
-        parser = BashParser(self.test_script_path, {})
+        parser = BashParser(file_path=self.test_script_path, config={})
         tasks = parser.parse()
         touch_tasks = [t for t in tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
         self.assertTrue(any("when" in t for t in touch_tasks))

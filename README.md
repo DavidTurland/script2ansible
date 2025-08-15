@@ -84,6 +84,12 @@ my %args = (path => '/tmp/wibble.txt', state => 'absent');
 Org::Turland::Helpers::my_sub(%args);
 ```
 
+# TODO
+- [ ] Variables
+- [ ] Environment Variables
+- [ ] sub roles in slack (webserver.main, webserver.failover)
+- [ ] Parse for loops in bash
+- [ ] what to do with Perl open,print,close 
 
 
 # Install Locally for Development
@@ -162,7 +168,7 @@ python -m script2ansible.cli myscript.sh playbook.yaml --type script --generator
         state: present
 ```
 
-## testing
+## Testing
 
 ```bash
 python3 -m script2ansible.cli --type slack --generator role examples/slack/roles/bar /tmp

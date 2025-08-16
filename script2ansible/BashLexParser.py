@@ -2,7 +2,91 @@ from .Parser import Parser
 from bashlex import parser, ast
 import re
 
+class ScopedVariables:
+    def __init__(self,parent,context):  
+        self.parent = parent
+        self.context = context
+        if self.context:
+            for k, v in context.items():
+                parent.push_variable(k, v)
+    def __del__(self):
+        # breakpoint()
+        if self.context:
+            for k in self.context.keys():
+                self.parent.pop_variable(k)
+
+class ForVisitor(ast.nodevisitor):
+    """
+    Handle 'for' loops in bash scripts.
+    n: the for node
+    parts: child nodes
+
+    spawn a visitor:
+    maintain state based on ReservedwordNode (update state in visitreserved):
+    for state:
+        in visitword: capture WordNode as var
+    in state:
+        in visitword: capture WordNode's as valuesvar
+    do state:
+        visitcommand as normal(?)
+    done:
+        wrap-up
+
+[ReservedwordNode(pos=(1, 4) word='for'),
+ WordNode(parts=[] pos=(5, 6) word='s'),
+ ReservedwordNode(pos=(7, 9) word='in'),
+ WordNode(parts=[] pos=(10, 17) word='server1'),
+ WordNode(parts=[] pos=(18, 25) word='server2'),
+ WordNode(parts=[] pos=(26, 33) word='server3'),
+ ReservedwordNode(pos=(34, 36) word='do'),
+ CommandNode(parts=[WordNode(parts=[] pos=(41, 43) word='cp'), WordNode(parts=[ParameterNode(pos=(49, 53) value='s')] pos=(44, 57) word='/tmp/${s}.txt'), WordNode(parts=[ParameterNode(pos=(67, 71) value='S')] pos=(58, 71) word='/tmp/bar_${S}')] pos=(41, 71)),
+ ReservedwordNode(pos=(72, 76) word='done')]
+
+    """
+    def __init__(self,parent):
+        self.parent = parent
+        self.state = None
+        self.for_var=None
+        self.loop_vars = []
+        self.commands=[]
+
+    def visitreservedword(self, n, word):
+        self.state = word
+        if self.state == 'do':
+            pass
+            #self.parent.push_var()
+        elif self.state == 'done':
+            for loop_var in self.loop_vars:
+                context = {}
+                context[self.for_var] = loop_var
+                for command in self.commands:
+                    # breakpoint()
+                    self.parent.visitcommand(command,command.parts,context = context)
+
+    def visitlist(self, n, parts):
+        for part in parts:
+            self.visit(part)
+        return False
+    def visitcommand(self, n, parts):
+        if self.state == 'do':
+            self.commands.append(n)
+            
+        else:
+            breakpoint()
+        return False
+    def visitword(self, n, word):
+        if self.state == 'for':
+            self.for_var = word
+        elif self.state == 'in':
+            self.loop_vars.append(word)
+        elif self.state == 'done':
+            pass
+
+
 class TestVisitor(ast.nodevisitor):
+    """
+    TODO: be more ForVisitor
+    """
     def __init__(self):
         self.op = None
         self.state = 'lhs'
@@ -77,6 +161,7 @@ class BashNodeVisitor(ast.nodevisitor):
         self.tasks = tasks
         self.current_umask = "022"
         self.variables = {}
+        self.stack_variables = {}
         self.register_names = {}
         self.last_register = None  # Track last registered result
 
@@ -101,23 +186,39 @@ class BashNodeVisitor(ast.nodevisitor):
     def get_variables(self):
         return self.variables
 
+    def get_variable(self,var,default=None):
+        if var in self.stack_variables:
+            return self.stack_variables[var]
+        return self.variables.get(var,default)
+    
     def set_variable(self, var: str, value: str):
         value = self.interpret_variable(value)
         self.variables[var] = value
 
+    def push_variable(self, var: str, value: str):
+        """
+        sets a scoped variable
+        """
+        self.stack_variables[var] = value
+
+    def pop_variable(self, var: str):
+        """
+        deletes a scoped variable
+        """
+        del(self.stack_variables[var] )
+
     def interpret_variable(self, stringy: str) -> str:
+        def replace_var(match):
+            var = match.group('var')
+            return self.get_variable(var, match.group(0))
         # Replace ${VAR} style
         stringy = re.sub(
-            r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}",
-            lambda m: self.variables.get(m.group(1), m.group(0)),
-            stringy,
+            r"\$\{(?P<var>[A-Za-z_][A-Za-z0-9_]*)\}",
+            replace_var,
+            stringy
         )
-
         # Replace $VAR style (only if followed by non-word char or end-of-line)
-        def replace_var(match):
-            var = match.group(1)
-            return self.variables.get(var, match.group(0))
-        return re.sub(r"\$(\w+)\b", replace_var, stringy)
+        return re.sub(r"\$(?P<var>\w+)\b", replace_var, stringy)
 
     def visitassignment(self, n, parts):
         if '=' in n.word:
@@ -126,11 +227,13 @@ class BashNodeVisitor(ast.nodevisitor):
         # self.tasks.append({"_set_var": (var, val)})
         return False
 
-    def visitcommand(self, n, parts):
+    def visitcommand(self, n, parts, context = None):
         # Build the command string from parts
         cmd = []
         redir_type = None
         redir_file = None
+        scoped_vars = ScopedVariables(self,context)
+
         for part in parts:
             if part.kind == 'word':
                 cmd.append(part.word)
@@ -377,7 +480,7 @@ class BashNodeVisitor(ast.nodevisitor):
         test_node = n.parts[1] # ListNode
         body_nodes = n.parts[3:]
         when_cond = None
-        # breakpoint()
+        breakpoint()
 
         tv = TestVisitor()
         tv.visit(test_node)
@@ -402,6 +505,11 @@ class BashNodeVisitor(ast.nodevisitor):
                 self.tasks[i]["when"] = when_cond
         return False
 
+    def visitfor(self, n, parts):
+        for_visitor = ForVisitor(self)
+        for_visitor.visit(n)
+
+
 class BashLexParser(Parser):
     def __init__(self, file_path=None, script_string=None, config=None):
         super().__init__(file_path=file_path, config=config, script_string=script_string)
@@ -415,8 +523,11 @@ class BashLexParser(Parser):
         last_register = None
         last_status_cond = None
         source = None
-        with open(self.file_path, "r") as file:
-            source = file.read()
+        if self.file_path:
+            with open(self.file_path, "r") as file:
+                source = file.read()
+        else:
+            source = self.script_string
         # breakpoint()
         #print(f"Parsing {self.file_path} with BashLexParser")
         trees = parser.parse(source)

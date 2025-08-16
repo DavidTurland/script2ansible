@@ -73,6 +73,25 @@ class TestBashLexParser(unittest.TestCase):
         self.assertTrue(any("when" in t for t in echo_tasks))
         # The 'when' should reference MYVAR == 'wibble'
         self.assertTrue(any("MYVAR" in str(t.get("when", "")) and "wibble" in str(t.get("when", "")) for t in echo_tasks))
+    
+    def test_for_loop_simple(self):
+        config = {}
+        parser = BashLexParser(script_string="""
+for s in server1 server2 server3
+do
+    cp /tmp/${s}.txt /tmp/bar_${s}
+    ln /tmp/${s}_dest.txt /tmp/bar_${s}_src
+done
+            """, config=config)   
+        # parser = BashLexParser(file_path=self.test_script_path, config={})
+        tasks = parser.parse()
+        self.assertTrue(len(tasks),6)
+        # breakpoint()
+        # Find the echo task with a 'when' condition for variable comparison
+        #echo_tasks = [t for t in tasks if t.get("ansible.builtin.debug", {}).get("msg") == "matched"]
+        #self.assertTrue(any("when" in t for t in echo_tasks))
+        # The 'when' should reference MYVAR == 'wibble'
+        #self.assertTrue(any("MYVAR" in str(t.get("when", "")) and "wibble" in str(t.get("when", "")) for t in echo_tasks))
 
 if __name__ == "__main__":
     unittest.main()

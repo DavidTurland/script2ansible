@@ -1,5 +1,5 @@
 # script2ansible
-# Work-in-progress 
+
 
 Converts all operations in:
 - bash scripts
@@ -13,27 +13,67 @@ to Ansible tasks, which in turn are used to generate
 Also knows how to translate slack (https://github.com/jeviolle/slack) roles into new Ansible roles
 - 'scripts' can be either bash or perl
 - 'files' and their required movement are correctly translated to role files, with the corresponding task to copy
+# This is a Work-in-progress 
+Because many reasons, including:
+## Operation locality: push vs pull 
+
+The scripts:
+
+-  **A** could be intended to be run on the target(remote) host, with all files local to the target host, or maybe pulled from the server
+```bash
+cp /foo.txt /bar.txt
+```
+
+- **B** or they could be intended to run on the server ( probably hosting the files), and targetting a remote host
+```bash
+scp /foo.txt remote.host:/bar.txt
+```
+
+slack assumes **A**, with the role scripts run on the target host (required files are pulled in an earlier operation)
+
+Ansible assumes **B**, is run on the server,  but is flexible:
+- file-related tasks assume a src on the server, dest on the target, but the src can be remote
+- All task are run on the target host (simplistic)
+
+NOTE: It is assumed that standalone scripts (ie not slack scripts) are intended to be run (pulling) on the target
+
+This makes interpreting the pullng of files interesting:
+```bash
+scp remote.host:/bar.txt /foo.txt 
+```
+which should probably map to the ansible task( run from remote.host):
+```yaml
+- name: Copy server bar.txt
+  ansible.builtin.copy:
+    src: <somewhere>/bar.txt
+    dest: /foo.txt
+```
 
 
-# Bugs/ Feature requests / Pull Requests
 
-Bugs and feature Request should be raised with the assumption that they may be pasted into CoPilot verbatim. 
-
-
-Pull Requests are also likely better expressed as a chat to copilot which would have it respond similarily.
 
 # Supported Script Operations
 
 ## bash
-Bash scripts are visited using bashlex, they are not run
+note:
 
+Bash scripts are `visited` using [bashlex](https://github.com/idank/bashlex/blob/master/README.md) so:
+-  scripts are not run
+- environment variables need to be simulated
+
+
+## Operatiions:
 variable assignment and reference
+variables are currently updated and interpreted on the fly
+
+This is ok, as a flex, but not so good if those variables derive from something run-dependant
 ```bash
+output=$HOME/outputdir
 wibble=hello
 echo "$wibble wobble $wibblewobble"
 ```
 
-success of commands are used as when parameters for constrained tasks
+The success of a command is used as a `when` parameter for constrained tasks
 ```bash
 echo "hello" >> bert.txt
 if [[ $? -eq 0 ]]; then
@@ -41,7 +81,7 @@ if [[ $? -eq 0 ]]; then
 fi
 ```
 
-commands, an ever-increasing set:
+commands are an ever-increasing set:
 ```bash
 umask
 mkdir
@@ -57,7 +97,7 @@ apt install
 yum update
 yum upgrade
 yum install
-echo ( with redirectiob)
+echo ( with redirection: '>', and '>>' )
 ```
 
 ## Perl
@@ -84,19 +124,15 @@ my %args = (path => '/tmp/wibble.txt', state => 'absent');
 Org::Turland::Helpers::my_sub(%args);
 ```
 
-# TODO
-- [ ] Variables
-- [ ] Environment Variables
-- [ ] sub roles in slack (webserver.main, webserver.failover)
-- [ ] Parse for loops in bash
-- [ ] what to do with Perl open,print,close 
+# Slack Support
+Not that slack, this slack
 
+# Usage
 
-# Install Locally for Development
 ```bash
-# From the root directory
-pip install -e .
+script2ansible --type slack --generator role  examples/slack/roles/bar  /tmp/rolly
 ```
+
 # Permutations of type, generator, input and output
 Work in progress
 
@@ -108,12 +144,6 @@ Work in progress
 
 
 
-# Usage
-
-```bash
-script2ansible --type slack --generator role  tests/slack/roles/bar  /tmp/rolly
-```
-
 ## How to Run Without Installing
 
 From the root directory (where setup.py is), run:
@@ -124,12 +154,10 @@ python -m script2ansible.cli --type slack --generator role  tests/slack/roles/ba
 python -m script2ansible.cli input.sh output.json --json
 ```
 
-# Unit Tests
-```python
-python -m unittest discover -s tests
-```
 
-## Example: Bash to Ansible Playbook
+# Examples
+
+## Bash script to Ansible Playbook
 
 Suppose you have a simple bash script:
 
@@ -166,19 +194,4 @@ python -m script2ansible.cli myscript.sh playbook.yaml --type script --generator
         name:
           - httpd
         state: present
-```
-
-## Testing
-
-```bash
-python3 -m script2ansible.cli --type slack --generator role examples/slack/roles/bar /tmp
-```
-
-
-```bash
-python3 -m script2ansible.cli --type slack -generator role_tasks examples/slack/roles/bar /tmp
-```
-
-```bash
-python3 -m script2ansible.cli --type script --generator playbook examples/bash/sample1.sh /tmp/floob.yaml
 ```

@@ -128,5 +128,3 @@ class BashProcessor(Processor):
         )
         generator.generate()
 
-
-

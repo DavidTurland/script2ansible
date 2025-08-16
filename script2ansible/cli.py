@@ -29,8 +29,8 @@ if __name__ == "__main__":
         help="type of thing to generate (role or playbook)",
     )
 
-    parser.add_argument("role_name", help="ansible role name - overrides implied or defines when missing ")
-
+    parser.add_argument("--role_name", 
+                        help="ansible role name - overrides implied or defines when missing ")
 
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 

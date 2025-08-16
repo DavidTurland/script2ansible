@@ -2,160 +2,210 @@ from .Parser import Parser
 from bashlex import parser, ast
 import re
 
+
 class ScopedVariables:
-    def __init__(self,parent,context):  
+    def __init__(self, parent, context):
         self.parent = parent
         self.context = context
         if self.context:
             for k, v in context.items():
                 parent.push_variable(k, v)
+
     def __del__(self):
         # breakpoint()
         if self.context:
             for k in self.context.keys():
                 self.parent.pop_variable(k)
 
-class ForVisitor(ast.nodevisitor):
+
+class IfVisitor(ast.nodevisitor):
     """
-    Handle 'for' loops in bash scripts.
-    n: the for node
-    parts: child nodes
+        Handle 'for' loops in bash scripts.
+        n: the for node
+        parts: child nodes
 
-    spawn a visitor:
-    maintain state based on ReservedwordNode (update state in visitreserved):
-    for state:
-        in visitword: capture WordNode as var
-    in state:
-        in visitword: capture WordNode's as valuesvar
-    do state:
-        visitcommand as normal(?)
-    done:
-        wrap-up
+        spawn a visitor:
+        maintain state based on ReservedwordNode (update state in visitreserved):
+        if state:
+            in visitword: capture WordNode as var
+        then state:
+            in visitword: capture WordNode's as valuesvar
+        fi state:
+            visitcommand as normal(?)
 
-[ReservedwordNode(pos=(1, 4) word='for'),
- WordNode(parts=[] pos=(5, 6) word='s'),
- ReservedwordNode(pos=(7, 9) word='in'),
- WordNode(parts=[] pos=(10, 17) word='server1'),
- WordNode(parts=[] pos=(18, 25) word='server2'),
- WordNode(parts=[] pos=(26, 33) word='server3'),
- ReservedwordNode(pos=(34, 36) word='do'),
- CommandNode(parts=[WordNode(parts=[] pos=(41, 43) word='cp'), WordNode(parts=[ParameterNode(pos=(49, 53) value='s')] pos=(44, 57) word='/tmp/${s}.txt'), WordNode(parts=[ParameterNode(pos=(67, 71) value='S')] pos=(58, 71) word='/tmp/bar_${S}')] pos=(41, 71)),
- ReservedwordNode(pos=(72, 76) word='done')]
-
+    IfNode(pos=(290, 334), parts=[
+      ReservedwordNode(pos=(290, 292), word='if'),
+      ListNode(pos=(293, 306), parts=[
+          CommandNode(pos=(293, 305), parts=[
+            WordNode(pos=(293, 294), word='['),
+            WordNode(pos=(295, 297), word='$?', parts=[
+              ParameterNode(pos=(295, 297), value='?'),
+            ]),
+            WordNode(pos=(298, 301), word='-eq'),
+            WordNode(pos=(302, 303), word='0'),
+            WordNode(pos=(304, 305), word=']'),
+          ]),
+          OperatorNode(op=';', pos=(305, 306)),
+        ]),
+      ReservedwordNode(pos=(307, 311), word='then'),
+      CommandNode(pos=(314, 331), parts=[
+        WordNode(pos=(314, 319), word='touch'),
+        WordNode(pos=(320, 331), word='/tmp/ok.txt'),
+      ]),
+      ReservedwordNode(pos=(332, 334), word='fi'),
+    ])
     """
-    def __init__(self,parent):
+
+    def __init__(self, parent):
         self.parent = parent
         self.state = None
-        self.for_var=None
-        self.loop_vars = []
-        self.commands=[]
+        self.test_state = "lhs"
+        self.commands = []
+
+    def get_commands(self):
+        return self.commands
+
+    def process_test(self):
+        test_return_code = False
+        if "$?" == self.arg_lhs:
+            self.arg_lhs = "0"
+            test_return_code = True
+        elif "$?" == self.arg_rhs:
+            self.arg_rhs = "0"
+            test_return_code = True
+        result = None
+        if "-eq" == self.op:
+            result = self.arg_lhs == self.arg_rhs
+            result_str = self.arg_lhs + " == " + self.arg_rhs
+        elif "-ne" == self.op:
+            result = self.arg_lhs != self.arg_rhs
+            result_str = self.arg_lhs + " != " + self.arg_rhs
+        elif "-lt" == self.op:
+            result = self.arg_lhs < self.arg_rhs
+            result_str = self.arg_lhs + " < " + self.arg_rhs
+        elif "-le" == self.op:
+            result = self.arg_lhs <= self.arg_rhs
+            result_str = self.arg_lhs + " <= " + self.arg_rhs
+        elif "-gt" == self.op:
+            result = self.arg_lhs > self.arg_rhs
+            result_str = self.arg_lhs + " > " + self.arg_rhs
+        elif "-ge" == self.op:
+            result = self.arg_lhs >= self.arg_rhs
+            result_str = self.arg_lhs + " >= " + self.arg_rhs
+        self.result = result
+        self.test_return_code = test_return_code
+        self.result_str = result_str
 
     def visitreservedword(self, n, word):
         self.state = word
-        if self.state == 'do':
+        if self.state == "then":
+            # can process test
+            self.process_test()
+        elif self.state == "fi":
+            # can process body
             pass
-            #self.parent.push_var()
-        elif self.state == 'done':
+
+    def visitword(self, n, word):
+        if self.state == "if":
+            if word == "[" or word == "]":
+                # Ignore brackets
+                return
+            if self.test_state == "lhs":
+                if (
+                    "-eq" == word
+                    or "-ne" == word
+                    or "-lt" == word
+                    or "-le" == word
+                    or "-gt" == word
+                    or "-ge" == word
+                ):
+                    self.test_state = "rhs"
+                    self.op = word
+                else:
+                    self.arg_lhs = word
+            elif self.test_state == "rhs":
+                self.arg_rhs = word
+        else:
+            return
+
+    def visitcommand(self, n, parts):
+        if self.state == "then":
+            self.commands.append(n)
+            return False
+        return True
+
+
+class ForVisitor(ast.nodevisitor):
+    """
+        Handle 'for' loops in bash scripts.
+        n: the for node
+        parts: child nodes
+
+        spawn a visitor:
+        maintain state based on ReservedwordNode (update state in visitreserved):
+        for state:
+            in visitword: capture WordNode as var
+        in state:
+            in visitword: capture WordNode's as valuesvar
+        do state:
+            visitcommand as normal(?)
+        done:
+            wrap-up
+
+    [ReservedwordNode(pos=(1, 4) word='for'),
+     WordNode(parts=[] pos=(5, 6) word='s'),
+     ReservedwordNode(pos=(7, 9) word='in'),
+     WordNode(parts=[] pos=(10, 17) word='server1'),
+     WordNode(parts=[] pos=(18, 25) word='server2'),
+     WordNode(parts=[] pos=(26, 33) word='server3'),
+     ReservedwordNode(pos=(34, 36) word='do'),
+     CommandNode(parts=[WordNode(parts=[] pos=(41, 43) word='cp'), WordNode(parts=[ParameterNode(pos=(49, 53) value='s')] pos=(44, 57) word='/tmp/${s}.txt'), WordNode(parts=[ParameterNode(pos=(67, 71) value='S')] pos=(58, 71) word='/tmp/bar_${S}')] pos=(41, 71)),
+     ReservedwordNode(pos=(72, 76) word='done')]
+
+    """
+
+    def __init__(self, parent):
+        self.parent = parent
+        self.state = None
+        self.for_var = None
+        self.loop_vars = []
+        self.commands = []
+
+    def visitreservedword(self, n, word):
+        self.state = word
+        if self.state == "do":
+            pass
+            # self.parent.push_var()
+        elif self.state == "done":
             for loop_var in self.loop_vars:
                 context = {}
                 context[self.for_var] = loop_var
                 for command in self.commands:
                     # breakpoint()
-                    self.parent.visitcommand(command,command.parts,context = context)
+                    self.parent.visitcommand(command, command.parts, context=context)
 
     def visitlist(self, n, parts):
         for part in parts:
             self.visit(part)
         return False
+
     def visitcommand(self, n, parts):
-        if self.state == 'do':
+        if self.state == "do":
             self.commands.append(n)
-            
+
         else:
             breakpoint()
         return False
+
     def visitword(self, n, word):
-        if self.state == 'for':
+        if self.state == "for":
             self.for_var = word
-        elif self.state == 'in':
+        elif self.state == "in":
             self.loop_vars.append(word)
-        elif self.state == 'done':
+        elif self.state == "done":
             pass
 
 
-class TestVisitor(ast.nodevisitor):
-    """
-    TODO: be more ForVisitor
-    """
-    def __init__(self):
-        self.op = None
-        self.state = 'lhs'
-        self.arg_lhs = None
-        self.arg_rhs = None
-
-    def test(self):
-        test_return_code = False
-        if('$?' == self.arg_lhs):
-            self.arg_lhs = '0'
-            test_return_code = True
-        elif ('$?' == self.arg_rhs):
-            self.arg_rhs = '0'
-            test_return_code = True
-        result = None
-        if ('-eq' == self.op):
-            result = (self.arg_lhs  == self.arg_rhs)
-            result_str = self.arg_lhs  + " == " + self.arg_rhs
-        elif ('-ne' == self.op):
-            result = (self.arg_lhs  != self.arg_rhs)
-            result_str = self.arg_lhs  + " != " + self.arg_rhs
-        elif ('-lt' == self.op):
-            result = (self.arg_lhs  < self.arg_rhs)
-            result_str = self.arg_lhs  + " < " + self.arg_rhs
-        elif ('-le' == self.op):
-            result = (self.arg_lhs  <= self.arg_rhs)
-            result_str = self.arg_lhs  + " <= " + self.arg_rhs
-        elif ('-gt' == self.op):
-            result = (self.arg_lhs  > self.arg_rhs)
-            result_str = self.arg_lhs  + " > " + self.arg_rhs
-        elif ('-ge' == self.op):
-            result =  (self.arg_lhs  >= self.arg_rhs)
-            result_str = self.arg_lhs  + " >= " + self.arg_rhs
-        return (test_return_code, result, result_str)
-
-    def __str__(self):
-        return (f"TestVisitor(op={self.op}, arg_lhs={self.arg_lhs}, arg_rhs={self.arg_rhs})")
-    def visitlist(self, n, parts):
-        for part in parts:
-            self.visit(part)
-        return False
-    def visitcommand(self, n, parts):
-        for part in parts:
-            self.visit(part)
-        return False
-    def visitword(self, n, word):
-        if word == '[' or word == ']':
-            # Ignore brackets
-            return
-        if self.state == 'lhs':
-            if ('-eq' == word or
-                '-ne' == word or
-                '-lt' == word or
-                '-le' == word or
-                '-gt' == word or
-                '-ge' == word):
-                self.state = 'rhs'
-                self.op = word
-            else:
-                self.arg_lhs = word
-        elif self.state == 'rhs':
-            self.arg_rhs = word
-    # def visitoperator(self, n, op):
-    #     return
-    # def visitparameter(self, n, value):
-    #     if self.state == 'lhs':
-    #         pass # self.arg_lhs = value
-    #     elif self.state == 'rhs':
-    #         pass #self.arg_rhs = value
 class BashNodeVisitor(ast.nodevisitor):
     def __init__(self, tasks):
         self.tasks = tasks
@@ -173,7 +223,7 @@ class BashNodeVisitor(ast.nodevisitor):
             return format(default & ~mask, "04o")
         except Exception:
             return None
-        
+
     def get_register_name(self, name):
         """Generate a unique register name for Ansible."""
         if name not in self.register_names:
@@ -186,11 +236,11 @@ class BashNodeVisitor(ast.nodevisitor):
     def get_variables(self):
         return self.variables
 
-    def get_variable(self,var,default=None):
+    def get_variable(self, var, default=None):
         if var in self.stack_variables:
             return self.stack_variables[var]
-        return self.variables.get(var,default)
-    
+        return self.variables.get(var, default)
+
     def set_variable(self, var: str, value: str):
         value = self.interpret_variable(value)
         self.variables[var] = value
@@ -205,48 +255,45 @@ class BashNodeVisitor(ast.nodevisitor):
         """
         deletes a scoped variable
         """
-        del(self.stack_variables[var] )
+        del self.stack_variables[var]
 
     def interpret_variable(self, stringy: str) -> str:
         def replace_var(match):
-            var = match.group('var')
+            var = match.group("var")
             return self.get_variable(var, match.group(0))
+
         # Replace ${VAR} style
-        stringy = re.sub(
-            r"\$\{(?P<var>[A-Za-z_][A-Za-z0-9_]*)\}",
-            replace_var,
-            stringy
-        )
+        stringy = re.sub(r"\$\{(?P<var>[A-Za-z_][A-Za-z0-9_]*)\}", replace_var, stringy)
         # Replace $VAR style (only if followed by non-word char or end-of-line)
         return re.sub(r"\$(?P<var>\w+)\b", replace_var, stringy)
 
     def visitassignment(self, n, parts):
-        if '=' in n.word:
-            var, val = n.word.split('=', 1)
+        if "=" in n.word:
+            var, val = n.word.split("=", 1)
             self.set_variable(var, val)
         # self.tasks.append({"_set_var": (var, val)})
         return False
 
-    def visitcommand(self, n, parts, context = None):
+    def visitcommand(self, n, parts, context=None):
         # Build the command string from parts
         cmd = []
         redir_type = None
         redir_file = None
-        scoped_vars = ScopedVariables(self,context)
+        scoped_vars = ScopedVariables(self, context)
 
         for part in parts:
-            if part.kind == 'word':
+            if part.kind == "word":
                 cmd.append(part.word)
-            elif part.kind == 'redirect':
+            elif part.kind == "redirect":
                 # Only handle > and >> for echo
-                if part.type in ('>', '>>'):
+                if part.type in (">", ">>"):
                     # breakpoint()  # Debugging point
                     redir_type = part.type
                     redir_file = part.output.word
             else:
                 # Recursively visit other nodes
                 self.visit(part)
-        command_str = ' '.join(cmd)
+        command_str = " ".join(cmd)
 
         # Match and capture supported commands
         # umask
@@ -260,15 +307,17 @@ class BashNodeVisitor(ast.nodevisitor):
         if m:
             mode = self.umask_to_mode(is_dir=True)
             path = self.interpret_variable(m.group("path"))
-            self.tasks.append({
-                "name": f"Ensure directory {path} exists",
-                "ansible.builtin.file": {
-                    "path": path,
-                    "state": "directory",
-                    "mode": mode
-                },
-                "register": self.get_register_name("mkdir"),
-            })
+            self.tasks.append(
+                {
+                    "name": f"Ensure directory {path} exists",
+                    "ansible.builtin.file": {
+                        "path": path,
+                        "state": "directory",
+                        "mode": mode,
+                    },
+                    "register": self.get_register_name("mkdir"),
+                }
+            )
             return False
 
         # touch
@@ -276,15 +325,17 @@ class BashNodeVisitor(ast.nodevisitor):
         if m:
             mode = self.umask_to_mode(is_dir=False)
             path = self.interpret_variable(m.group("path"))
-            self.tasks.append({
-                "name": f"Ensure file {path} exists",
-                "ansible.builtin.file": {
-                    "path": path,
-                    "state": "touch",
-                    "mode": mode
-                },
-                "register": self.get_register_name("touch_file"),   
-            })
+            self.tasks.append(
+                {
+                    "name": f"Ensure file {path} exists",
+                    "ansible.builtin.file": {
+                        "path": path,
+                        "state": "touch",
+                        "mode": mode,
+                    },
+                    "register": self.get_register_name("touch_file"),
+                }
+            )
             return False
 
         # ln
@@ -293,15 +344,17 @@ class BashNodeVisitor(ast.nodevisitor):
             is_symlink = bool(m.group(1))
             src = self.interpret_variable(m.group("src"))
             dest = self.interpret_variable(m.group("dest"))
-            self.tasks.append({
-                "name": f"Create {'symlink' if is_symlink else 'hard link'} {dest} → {src}",
-                "ansible.builtin.file": {
-                    "src": src,
-                    "dest": dest,
-                    "state": "link" if is_symlink else "hard"
-                },
-                "register": self.get_register_name("ln"),
-            })
+            self.tasks.append(
+                {
+                    "name": f"Create {'symlink' if is_symlink else 'hard link'} {dest} → {src}",
+                    "ansible.builtin.file": {
+                        "src": src,
+                        "dest": dest,
+                        "state": "link" if is_symlink else "hard",
+                    },
+                    "register": self.get_register_name("ln"),
+                }
+            )
             return False
 
         # cp
@@ -309,39 +362,45 @@ class BashNodeVisitor(ast.nodevisitor):
         if m:
             src = self.interpret_variable(m.group("src"))
             dest = self.interpret_variable(m.group("dest"))
-            self.tasks.append({
-                "name": f"Copy {src} to {dest}",
-                "ansible.builtin.copy": {
-                    "src": src,
-                    "dest": dest,
-                    "remote_src": False
-                },
-                "register": self.get_register_name("copy_file"),
-            })
+            self.tasks.append(
+                {
+                    "name": f"Copy {src} to {dest}",
+                    "ansible.builtin.copy": {
+                        "src": src,
+                        "dest": dest,
+                        "remote_src": False,
+                    },
+                    "register": self.get_register_name("copy_file"),
+                }
+            )
             return False
 
         # ldconfig
         if command_str.startswith("ldconfig"):
-            self.tasks.append({
-                "name": "Run ldconfig",
-                "ansible.builtin.shell": "ldconfig",
-                "register": self.get_register_name("ldconfig"),
-            })
+            self.tasks.append(
+                {
+                    "name": "Run ldconfig",
+                    "ansible.builtin.shell": "ldconfig",
+                    "register": self.get_register_name("ldconfig"),
+                }
+            )
             return False
 
         # gunzip
         m = re.match(r"gunzip\s+(?P<path>\S+)", command_str)
         if m:
             path = self.interpret_variable(m.group("path"))
-            self.tasks.append({
-                "name": f"Extract GZ archive {path}",
-                "ansible.builtin.unarchive": {
-                    "src": path,
-                    "remote_src": False,
-                    "dest": "/tmp"
-                },
-                "register": self.get_register_name("extract_gz"),
-            })
+            self.tasks.append(
+                {
+                    "name": f"Extract GZ archive {path}",
+                    "ansible.builtin.unarchive": {
+                        "src": path,
+                        "remote_src": False,
+                        "dest": "/tmp",
+                    },
+                    "register": self.get_register_name("extract_gz"),
+                }
+            )
             return False
 
         # chmod
@@ -349,109 +408,115 @@ class BashNodeVisitor(ast.nodevisitor):
         if m:
             mode = m.group("mode")
             path = self.interpret_variable(m.group("path"))
-            self.tasks.append({
-                "name": f"Set permissions of {path} to {mode}",
-                "ansible.builtin.file": {
-                    "path": path,
-                    "mode": mode
-                },
-                "register": self.get_register_name("file_persmissions"),
-            })
+            self.tasks.append(
+                {
+                    "name": f"Set permissions of {path} to {mode}",
+                    "ansible.builtin.file": {"path": path, "mode": mode},
+                    "register": self.get_register_name("file_persmissions"),
+                }
+            )
             return False
 
         # apt update
         if re.match(r"apt(-get)?\s+update", command_str):
-            self.tasks.append({
-                "name": "Update APT package cache",
-                "ansible.builtin.apt": {"update_cache": True},
-                "register": self.get_register_name("apt_update"),
-            })
+            self.tasks.append(
+                {
+                    "name": "Update APT package cache",
+                    "ansible.builtin.apt": {"update_cache": True},
+                    "register": self.get_register_name("apt_update"),
+                }
+            )
             return False
 
         # apt upgrade
         if re.match(r"apt(-get)?\s+upgrade", command_str):
-            self.tasks.append({
-                "name": "Upgrade all packages",
-                "ansible.builtin.apt": {"upgrade": "dist"},
-                "register": self.get_register_name("apt_upgrade"),
-            })
+            self.tasks.append(
+                {
+                    "name": "Upgrade all packages",
+                    "ansible.builtin.apt": {"upgrade": "dist"},
+                    "register": self.get_register_name("apt_upgrade"),
+                }
+            )
             return False
 
         # apt install
         m = re.match(r"apt(-get)?\s+install\s+(-y\s+)?(?P<packages>.+)", command_str)
         if m:
             pkgs = m.group("packages").split()
-            self.tasks.append({
-                "name": f"Install packages: {' '.join(pkgs)}",
-                "ansible.builtin.apt": {
-                    "name": pkgs,
-                    "state": "present",
-                    "update_cache": True
-                },
-                "register": self.get_register_name("apt_install"),
-            })
+            self.tasks.append(
+                {
+                    "name": f"Install packages: {' '.join(pkgs)}",
+                    "ansible.builtin.apt": {
+                        "name": pkgs,
+                        "state": "present",
+                        "update_cache": True,
+                    },
+                    "register": self.get_register_name("apt_install"),
+                }
+            )
             # print(f"Installing packages: {pkgs}")
             return False
 
         # yum update
         if re.match(r"yum\s+update(\s+-y)?", command_str):
-            self.tasks.append({
-                "name": "Update YUM package cache",
-                "ansible.builtin.yum": {
-                    "name": "*", 
-                    "state": "latest",
-                },
-                "register": self.get_register_name("yum_update"),
-            })
+            self.tasks.append(
+                {
+                    "name": "Update YUM package cache",
+                    "ansible.builtin.yum": {
+                        "name": "*",
+                        "state": "latest",
+                    },
+                    "register": self.get_register_name("yum_update"),
+                }
+            )
             return False
 
         # yum install
         m = re.match(r"yum\s+install\s+(-y\s+)?(?P<packages>.+)", command_str)
         if m:
             pkgs = m.group("packages").split()
-            self.tasks.append({
-                "name": f"Install packages: {' '.join(pkgs)}",
-                "ansible.builtin.yum": {
-                    "name": pkgs,
-                    "state": "present"
+            self.tasks.append(
+                {
+                    "name": f"Install packages: {' '.join(pkgs)}",
+                    "ansible.builtin.yum": {"name": pkgs, "state": "present"},
                 }
-            })
+            )
             return False
 
         # echo with redirect
         m = re.match(r'echo\s+(?P<text>".+?"|\'.+?\'|.+)', command_str)
         if m and redir_type and redir_file:
-            text = m.group("text").strip('"\'')
+            text = m.group("text").strip("\"'")
             text = self.interpret_variable(text)
-            if redir_type == '>':
-                self.tasks.append({
-                    "name": f"Write text to {redir_file}",
-                    "ansible.builtin.copy": {
-                        "dest": redir_file,
-                        "content": text
+            if redir_type == ">":
+                self.tasks.append(
+                    {
+                        "name": f"Write text to {redir_file}",
+                        "ansible.builtin.copy": {"dest": redir_file, "content": text},
                     }
-                })
+                )
             else:  # >>
-                self.tasks.append({
-                    "name": f"Append text to {redir_file}",
-                    "ansible.builtin.lineinfile": {
-                        "path": redir_file,
-                        "line": text,
-                        "create": True,
-                        "insertafter": "EOF"
+                self.tasks.append(
+                    {
+                        "name": f"Append text to {redir_file}",
+                        "ansible.builtin.lineinfile": {
+                            "path": redir_file,
+                            "line": text,
+                            "create": True,
+                            "insertafter": "EOF",
+                        },
                     }
-                })
+                )
             return False
 
         # echo without redirect
         m = re.match(r'echo\s+(?P<text>".+?"|\'.+?\'|.+)', command_str)
         if m and not redir_type:
-            text = m.group("text").strip('"\'')
+            text = m.group("text").strip("\"'")
             text = self.interpret_variable(text)
-            self.tasks.append({
-                "name": f"Echo text: {text}",
-                "ansible.builtin.debug": {"msg": text}
-            })
+            self.tasks.append(
+                {"name": f"Echo text: {text}", "ansible.builtin.debug": {"msg": text}}
+            )
             return False
 
         # For every command, if it's not a variable assignment, add a register
@@ -461,11 +526,13 @@ class BashNodeVisitor(ast.nodevisitor):
         # After adding a task, update self.last_register
         # For shell commands not matched above:
         if cmd and not command_str.startswith("echo"):
-            self.tasks.append({
-                "name": f"Run shell command: {command_str}",
-                "shell": command_str,
-                "register": self.get_register_name(cmd),
-            })
+            self.tasks.append(
+                {
+                    "name": f"Run shell command: {command_str}",
+                    "shell": command_str,
+                    "register": self.get_register_name(cmd),
+                }
+            )
 
         return False
 
@@ -473,21 +540,30 @@ class BashNodeVisitor(ast.nodevisitor):
         # Only support two forms:
         # 1. if [ $? -eq 0 ]; then ... fi
         # 2. if [ "$foo" -eq "wibble" ]; then ... fi
-        # The test is in n.parts[1], 
+        # The test is in n.parts[1],
         #    body is n.parts[3:]
         print("x" * 80)
-        print (n.dump())
-        test_node = n.parts[1] # ListNode
-        body_nodes = n.parts[3:]
-        when_cond = None
-        breakpoint()
+        print(n.dump())
+        # test_node = n.parts[1] # ListNode
+        # body_nodes = n.parts[3:]
+        # when_cond = None
+        # breakpoint()
 
-        tv = TestVisitor()
-        tv.visit(test_node)
-        print(tv)
+        # tv = TestVisitor()
+        # tv.visit(test_node)
+        # print(tv)
 
-        (test_return_code, result, result_str) = tv.test()
-        print(f"Test result: {result}, return code: {test_return_code}, result_str: {result_str}")
+        # (test_return_code, result, result_str) = tv.test()
+
+        iv = IfVisitor(self)
+        iv.visit(n)
+        test_return_code = iv.test_return_code
+        result = iv.result
+        result_str = iv.result_str
+
+        print(
+            f"Test result: {result}, return code: {test_return_code}, result_str: {result_str}"
+        )
         if test_return_code:
             if result:
                 when_cond = f"{self.last_register} is succeeded"
@@ -495,6 +571,8 @@ class BashNodeVisitor(ast.nodevisitor):
                 when_cond = f"{self.last_register} is failed"
         else:
             when_cond = result_str
+
+        body_nodes = iv.get_commands()
 
         # Visit body and add 'when' to each task generated
         before_len = len(self.tasks)
@@ -512,7 +590,10 @@ class BashNodeVisitor(ast.nodevisitor):
 
 class BashLexParser(Parser):
     def __init__(self, file_path=None, script_string=None, config=None):
-        super().__init__(file_path=file_path, config=config, script_string=script_string)
+        super().__init__(
+            file_path=file_path, config=config, script_string=script_string
+        )
+
     def parse(self):
         """
         https://github.com/idank/bashlex/blob/master/examples/commandsubstitution-remover.py
@@ -529,13 +610,12 @@ class BashLexParser(Parser):
         else:
             source = self.script_string
         # breakpoint()
-        #print(f"Parsing {self.file_path} with BashLexParser")
+        # print(f"Parsing {self.file_path} with BashLexParser")
         trees = parser.parse(source)
-        #for tree in trees:
+        # for tree in trees:
         #    print("" * 80)
         #    print (tree.dump())
         visitor = BashNodeVisitor(tasks)
         for tree in trees:
             visitor.visit(tree)
         return visitor.tasks
-

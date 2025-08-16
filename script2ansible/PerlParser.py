@@ -110,7 +110,7 @@ BEGIN {
             ::log_op("external_call", module => "File::Copy", method => "copy", args => [$src, $dest]);
             # return File::Copy::copy($src, $dest);
             return;
-        }; 
+        };
     }
 
 }
@@ -158,6 +158,7 @@ END {
     $fh->close;
 }
 """
+
     def __init__(self, file_path=None, script_string=None, config=None):
         super().__init__(file_path=file_path, config=config, script_string=script_string)
         if self.file_path:
@@ -197,14 +198,14 @@ END {
             + "\n"
             + self.INSTRUMENTATION_CODE_CUSTOM
             + "\n"
-            + self.INSTRUMENTATION_CODE_SUFFIX       
+            + self.INSTRUMENTATION_CODE_SUFFIX
         )
         self.instrumentation_packages = set()
         for match in re.finditer(r'^\s*package\s+([A-Za-z0-9_:]+)', self.instrumentation_code, re.MULTILINE):
             pkg = match.group(1)
             self.instrumentation_packages.add(pkg)
 
-    def preprocess_code(self,original_code):
+    def preprocess_code(self, original_code):
         return original_code
         original_lines = original_code.splitlines()
         commented_lines = []
@@ -221,7 +222,7 @@ END {
                 commented_lines.append(line)
         preprocessed_code = "\n".join(commented_lines)  
         return preprocessed_code
-            
+
     # ---------- Step 1: Generate instrumented.pl ----------
     def generate_instrumented_perl(self):
 
@@ -410,7 +411,7 @@ END {
                 data = d.get("data")
                 task_type = data.get("task")
                 task_params = data.get("task_params", {})
-                params= data.get("params", {})
+                params = data.get("params", {})
                 name = data.get("name", f"Custom task {task_type}")
                 task = {
                     "name": name,

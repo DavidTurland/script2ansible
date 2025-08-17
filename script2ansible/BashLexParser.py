@@ -20,18 +20,17 @@ class ScopedVariables:
 
 class IfVisitor(ast.nodevisitor):
     """
-        Handle 'for' loops in bash scripts.
-        n: the for node
-        parts: child nodes
+        visit 'if' loops
 
         spawn a visitor:
         maintain state based on ReservedwordNode (update state in visitreserved):
         if state:
-            in visitword: capture WordNode as var
+            in visitword: capture lhs , op and rhs based on test_state
         then state:
-            in visitword: capture WordNode's as valuesvar
+            accrue commands in visitcommand
         fi state:
-            visitcommand as normal(?)
+           
+            
 
     IfNode(pos=(290, 334), parts=[
       ReservedwordNode(pos=(290, 292), word='if'),
@@ -111,19 +110,14 @@ class IfVisitor(ast.nodevisitor):
                 # Ignore brackets
                 return
             if self.test_state == "lhs":
-                if (
-                    "-eq" == word
-                    or "-ne" == word
-                    or "-lt" == word
-                    or "-le" == word
-                    or "-gt" == word
-                    or "-ge" == word
-                ):
+                if word in ("-eq", "-ne", "-lt", "-le", "-gt", "-ge"):
                     self.test_state = "rhs"
                     self.op = word
                 else:
+                    # maybe += 
                     self.arg_lhs = word
             elif self.test_state == "rhs":
+                # maybe += 
                 self.arg_rhs = word
         else:
             return
@@ -257,15 +251,25 @@ class BashNodeVisitor(ast.nodevisitor):
         """
         del self.stack_variables[var]
 
-    def interpret_variable(self, stringy: str) -> str:
+    def interpret_variable(self, stringy: str, type: str = 'interpret') -> str:
         def replace_var(match):
             var = match.group("var")
             return self.get_variable(var, match.group(0))
 
+        def jinja_var(match):
+            var = match.group("var")
+            return  f'{{{{ {var} }}}}'
+        
+        if type == 'interpret':
+            replacer = replace_var
+        elif type == 'jinja':
+            replacer = jinja_var
+
         # Replace ${VAR} style
-        stringy = re.sub(r"\$\{(?P<var>[A-Za-z_][A-Za-z0-9_]*)\}", replace_var, stringy)
+        stringy = re.sub(r"\$\{(?P<var>[A-Za-z_][A-Za-z0-9_]*)\}", replacer, stringy)
+
         # Replace $VAR style (only if followed by non-word char or end-of-line)
-        return re.sub(r"\$(?P<var>\w+)\b", replace_var, stringy)
+        return re.sub(r"\$(?P<var>\w+)\b", replacer, stringy)
 
     def visitassignment(self, n, parts):
         if "=" in n.word:
@@ -479,6 +483,7 @@ class BashNodeVisitor(ast.nodevisitor):
                 {
                     "name": f"Install packages: {' '.join(pkgs)}",
                     "ansible.builtin.yum": {"name": pkgs, "state": "present"},
+                    "register": self.get_register_name("yum_install"),
                 }
             )
             return False
@@ -493,18 +498,20 @@ class BashNodeVisitor(ast.nodevisitor):
                     {
                         "name": f"Write text to {redir_file}",
                         "ansible.builtin.copy": {"dest": redir_file, "content": text},
+                        "register": self.get_register_name("echo_redirect"),
                     }
                 )
             else:  # >>
                 self.tasks.append(
                     {
-                        "name": f"Append text to {redir_file}",
+                        "name": self.interpret_variable(f"Append text to {redir_file}"),
                         "ansible.builtin.lineinfile": {
                             "path": redir_file,
                             "line": text,
                             "create": True,
                             "insertafter": "EOF",
                         },
+                        "register": self.get_register_name("echo_redirect_append"),
                     }
                 )
             return False
@@ -612,9 +619,7 @@ class BashLexParser(Parser):
         # breakpoint()
         # print(f"Parsing {self.file_path} with BashLexParser")
         trees = parser.parse(source)
-        # for tree in trees:
-        #    print("" * 80)
-        #    print (tree.dump())
+
         visitor = BashNodeVisitor(tasks)
         for tree in trees:
             visitor.visit(tree)

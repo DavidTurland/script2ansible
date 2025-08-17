@@ -15,8 +15,9 @@ apt install bar
 apt update
 apt-get update
  # hmm
-ssh_config=/tmp/dooby.txt
-echo "hello" >> $ssh_config
+echo_file=/tmp/dooby.txt
+echo_success_file=/tmp/dooby_success.txt
+echo "hello" >> $echo_file
 if [ $? -eq 0 ]; then
-   echo "Either mycommand failed or <foo failed"
+   echo "the echo succeeded" >> $echo_success_file
 fi

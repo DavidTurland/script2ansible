@@ -1,13 +1,20 @@
 # TODO
 - [ ] Nailing down push, vs pull logic
+- [ ] sub roles in slack (webserver.main, webserver.failover)
+
+Bash
 - [ ] Variables: define and/or interpret
 - [ ] Environment Variables
-- [ ] sub roles in slack (webserver.main, webserver.failover)
-- [x] Parse for loops in bash
-- [ ] what to do with Perl open,print,close 
+- [x] Parse for loops
+- [ ] Parse while loops
 - [ ] support for new pragmas to guide translation
 
+Perl
 
+- [ ] Variables: define and/or interpret
+- [ ] Environment Variables
+- [ ] what to do with Perl open,print,close 
+- [ ] support for new pragmas to guide translation
 
 
 # Installing Locally for Development
@@ -15,7 +22,6 @@
 # From the root directory
 pip install -e .
 ```
-
 
 
 # Testing
@@ -26,18 +32,7 @@ python -m unittest discover -s tests
 ```
 
 
-```bash
-python3 -m script2ansible.cli --type slack --generator role examples/slack/roles/bar /tmp
-```
 
-
-```bash
-python3 -m script2ansible.cli --type slack -generator role_tasks examples/slack/roles/bar /tmp
-```
-
-```bash
-python3 -m script2ansible.cli --type script --generator playbook examples/bash/sample1.sh /tmp/floob.yaml
-```
 
 
 # Bugs/ Feature requests / Pull Requests

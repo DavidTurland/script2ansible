@@ -54,7 +54,7 @@ which should probably map to the ansible task( run from remote.host):
 
 # Supported Script Operations
 
-## bash
+# bash
 note:
 
 Bash scripts are `visited` using [bashlex](https://github.com/idank/bashlex/blob/master/README.md) so:
@@ -62,7 +62,7 @@ Bash scripts are `visited` using [bashlex](https://github.com/idank/bashlex/blob
 - environment variables need to be simulated
 
 
-## Operatiions:
+## Operations:
 variable assignment and reference
 variables are currently updated and interpreted on the fly
 
@@ -75,14 +75,39 @@ echo "$wibble wobble $wibblewobble"
 
 The success of a command is used as a `when` parameter for constrained tasks
 ```bash
-echo "hello" >> bert.txt
-if [[ $? -eq 0 ]]; then
-   echo "that worked so goodbye" >> floob.txt
+echo_file=/tmp/dooby.txt
+echo_success_file=/tmp/dooby_success.txt
+echo "hello" >> $echo_file
+if [ $? -eq 0 ]; then
+   echo "the echo succeeded" >> $echo_success_file
 fi
 ```
 
-commands are an ever-increasing set:
+generates:
+
+``yaml
+- name: Append text to /tmp/dooby.txt
+  ansible.builtin.lineinfile:
+    path: $echo_file
+    line: hello
+    create: true
+    insertafter: EOF
+  register: echo_redirect_append_1
+- name: Append text to /tmp/dooby_success.txt
+  ansible.builtin.lineinfile:
+    path: $echo_success_file
+    line: the echo succeeded
+    create: true
+    insertafter: EOF
+  register: echo_redirect_append_2
+  when: echo_redirect_append_1 is succeeded
+```
+
+
+bash constructs, and commands are an ever-increasing set:
 ```bash
+if construction
+for consruction
 umask
 mkdir
 touch
@@ -194,4 +219,17 @@ python -m script2ansible.cli myscript.sh playbook.yaml --type script --generator
         name:
           - httpd
         state: present
+```
+## Other Examples
+```bash
+python3 -m script2ansible.cli --type slack --generator role examples/slack/roles/bar /tmp
+```
+
+
+```bash
+python3 -m script2ansible.cli --type slack -generator role_tasks examples/slack/roles/bar /tmp
+```
+
+```bash
+python3 -m script2ansible.cli --type script --generator playbook examples/bash/sample1.sh /tmp/floob.yaml
 ```

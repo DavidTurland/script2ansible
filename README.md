@@ -85,7 +85,7 @@ fi
 
 generates:
 
-``yaml
+```yaml
 - name: Append text to /tmp/dooby.txt
   ansible.builtin.lineinfile:
     path: $echo_file

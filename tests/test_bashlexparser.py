@@ -45,7 +45,7 @@ class TestBashLexParser(unittest.TestCase):
         # Check cp task
         self.assertTrue(any("ansible.builtin.copy" in t for t in tasks))
         # Check ldconfig
-        self.assertTrue(any(t.get("ansible.builtin.shell") == "ldconfig" for t in tasks))
+        self.assertTrue(any(t.get("ansible.builtin.command") == "ldconfig" for t in tasks))
         # Check gunzip
         self.assertTrue(any("ansible.builtin.unarchive" in t for t in tasks))
         # Check chmod

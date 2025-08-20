@@ -53,6 +53,8 @@ if __name__ == "__main__":
     config["input"] = args.input
     config["output"] = args.output
     config["generator"] = args.generator
+    if args.role_name:
+        config["role_name"] = args.role_name
 
     if args.type == "slack":
         if os.path.isdir(config["input"]):
@@ -67,23 +69,26 @@ if __name__ == "__main__":
                     # assume we need to add the ansible roles dir
                     output_root = os.path.join(config["output"], "roles")
                 for role_name in os.listdir(config["input"]):
-                    output_path = os.path.join(output_root, role_name)
+                    config["role_name"] = role_name
+                    output_dir = os.path.join(output_root, role_name)
                     logging.info(f"Processing Slack role from directory: {role_name}")
-                    role_path = os.path.join(config["input"], role_name)
-                    if not os.path.isdir(role_path):
+                    role_dir = os.path.join(config["input"], role_name)
+                    if not os.path.isdir(role_dir):
                         continue
-                    processor = SlackRoleProcessor(role_path, output_path, config)
+                    processor = SlackRoleProcessor(role_dir, output_dir, config)
                     processor.process()
             else:
                 # assume we are processing a single slack role
                 if output_dir_name == "roles":
                     # assume ansible roles dir
-                    output_path = os.path.join(config["output"], dir_name)
+                    output_dir = os.path.join(config["output"], dir_name)
                 else:
                     # assume we need to add the ansible roles dir
-                    output_path = os.path.join(config["output"], "roles", dir_name)
+                    output_dir = os.path.join(config["output"], "roles", dir_name)
                 role_name = dir_name
-                processor = SlackRoleProcessor(args.input, output_path, config)
+                # if not set!!!!
+                config["role_name"] = role_name
+                processor = SlackRoleProcessor(args.input, output_dir, config)
                 processor.process()
         else:
             raise ValueError(
@@ -97,3 +102,7 @@ if __name__ == "__main__":
             raise ValueError(
                 f"Input path {args.input} is not a file for Bash processing."
             )
+    else:
+        raise ValueError(
+            f"Unknown type: {args.type}"
+        )   

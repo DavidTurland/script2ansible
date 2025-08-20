@@ -201,12 +201,13 @@ class ForVisitor(ast.nodevisitor):
 
 
 class BashNodeVisitor(ast.nodevisitor):
-    def __init__(self, tasks):
+    def __init__(self, tasks, parser):
         self.tasks = tasks
         self.current_umask = "022"
         self.variables = {}
         self.stack_variables = {}
         self.register_names = {}
+        self.parser = parser
         self.last_register = None  # Track last registered result
 
     def umask_to_mode(self, is_dir: bool = True):
@@ -219,12 +220,12 @@ class BashNodeVisitor(ast.nodevisitor):
             return None
 
     def get_register_name(self, name):
-        """Generate a unique register name for Ansible."""
-        if name not in self.register_names:
-            self.register_names[name] = 1
-        else:
-            self.register_names[name] += 1
-        self.last_register = f"{name}_{self.register_names[name]}"
+        """
+        Generate a unique register name for Ansible.
+        TODO: this should be a generator thing maybe?
+        """
+        # breakpoint()
+        self.last_register = self.parser.get_register_name(name)
         return self.last_register
 
     def get_variables(self):
@@ -348,6 +349,8 @@ class BashNodeVisitor(ast.nodevisitor):
             is_symlink = bool(m.group(1))
             src = self.interpret_variable(m.group("src"))
             dest = self.interpret_variable(m.group("dest"))
+            # TODO directory?
+            mode = self.umask_to_mode(is_dir=False)
             self.tasks.append(
                 {
                     "name": f"Create {'symlink' if is_symlink else 'hard link'} {dest} → {src}",
@@ -355,6 +358,7 @@ class BashNodeVisitor(ast.nodevisitor):
                         "src": src,
                         "dest": dest,
                         "state": "link" if is_symlink else "hard",
+                        "mode": mode,
                     },
                     "register": self.get_register_name("ln"),
                 }
@@ -378,14 +382,43 @@ class BashNodeVisitor(ast.nodevisitor):
                 }
             )
             return False
+        # mv
+        m = re.match(r"mv\s+(?P<src>\S+)\s+(?P<dest>\S+)", command_str)
+        if m:
+            src = self.interpret_variable(m.group("src"))
+            dest = self.interpret_variable(m.group("dest"))
+            command_str = f"mv {src} {dest}"
+            self.tasks.append(
+                {
+                    "name": f"Run shell command: {command_str}",
+                    "shell": command_str,
+                    "creates" : dest,
+                    "removes" : src,
+                    "register": self.get_register_name('mv'),
+                }
+            )
+            # self.tasks.append(
+            #     {
+            #         "name": f"Copy {src} to {dest}",
+            #         "ansible.builtin.copy": {
+            #             "src": src,
+            #             "dest": dest,
+            #             "remote_src": False,
+            #         },
+            #         "register": self.get_register_name("copy_file"),
+            #     }
+            # )
+            return False
 
         # ldconfig
         if command_str.startswith("ldconfig"):
+            reg_name = self.get_register_name("ldconfig")
             self.tasks.append(
                 {
                     "name": "Run ldconfig",
-                    "ansible.builtin.shell": "ldconfig",
-                    "register": self.get_register_name("ldconfig"),
+                    "ansible.builtin.command": "ldconfig",
+                    "register": reg_name,
+                    "changed_when": f"'changed' in {reg_name}.stdout or 'updated' in {reg_name}.stdout",
                 }
             )
             return False
@@ -407,7 +440,7 @@ class BashNodeVisitor(ast.nodevisitor):
             )
             return False
 
-        # chmod
+        # chmod with numeric mode (e.g., chmod 0700 /path)
         m = re.match(r"chmod\s+(?P<mode>\d+)\s+(?P<path>\S+)", command_str)
         if m:
             mode = m.group("mode")
@@ -416,10 +449,65 @@ class BashNodeVisitor(ast.nodevisitor):
                 {
                     "name": f"Set permissions of {path} to {mode}",
                     "ansible.builtin.file": {"path": path, "mode": mode},
-                    "register": self.get_register_name("file_persmissions"),
+                    "register": self.get_register_name("file_permissions"),
                 }
             )
             return False
+
+        # chmod with optional -R (recursive), numeric mode
+        m = re.match(r"chmod\s+(?P<recursive>-R\s+)?(?P<mode>\d+)\s+(?P<path>\S+)", command_str)
+        if m:
+            mode = m.group("mode")
+            path = self.interpret_variable(m.group("path"))
+            recursive = bool(m.group("recursive"))
+            task = {
+                "name": f"Set permissions of {path} to {mode}" + (" recursively" if recursive else ""),
+                "ansible.builtin.file": {"path": path, "mode": mode},
+                "register": self.get_register_name("file_permissions" + ("_recursive" if recursive else "")),
+            }
+            if recursive:
+                task["ansible.builtin.file"]["recurse"] = True
+            self.tasks.append(task)
+            return False
+
+        # chmod with optional -R (recursive), symbolic mode
+        m = re.match(r"chmod\s+(?P<recursive>-R\s+)?(?P<mode>[ugoa]+[+-=][rwx]+)\s+(?P<path>\S+)", command_str)
+        if m:
+            mode = m.group("mode")
+            path = self.interpret_variable(m.group("path"))
+            recursive = bool(m.group("recursive"))
+            task = {
+                "name": f"Set symbolic permissions of {path} to {mode}" + (" recursively" if recursive else ""),
+                "ansible.builtin.file": {"path": path, "mode": mode},
+                "register": self.get_register_name("file_permissions_symbolic" + ("_recursive" if recursive else "")),
+            }
+            if recursive:
+                task["ansible.builtin.file"]["recurse"] = True
+            self.tasks.append(task)
+            return False
+
+        # chown with optional -R (recursive), symbolic mode
+        m = re.match(r"chown\s+(?P<recursive>-R\s+)?(?P<owner>\w+):(?P<group>\w+)\s+(?P<path>\S+)", command_str)
+        if m:
+            owner = m.group("owner")
+            group = m.group("group")
+
+            path = self.interpret_variable(m.group("path"))
+            recursive = bool(m.group("recursive"))
+            task = {
+                "name": f"Set owner: group of {owner} :{group}" + (" recursively" if recursive else ""),
+                "ansible.builtin.file": {
+                    "path": path, 
+                    "owner": owner,
+                    "group": group},
+                "register": self.get_register_name("chown" + ("_recursive" if recursive else "")),
+            }
+            if recursive:
+                task["ansible.builtin.file"]["recurse"] = True
+            self.tasks.append(task)
+            return False
+
+
 
         # apt update
         if re.match(r"apt(-get)?\s+update", command_str):
@@ -443,8 +531,8 @@ class BashNodeVisitor(ast.nodevisitor):
             )
             return False
 
-        # apt install
-        m = re.match(r"apt(-get)?\s+install\s+(-y\s+)?(?P<packages>.+)", command_str)
+        # apt install (support optional --assume-yes or -y)
+        m = re.match(r"apt(-get)?\s+install\s+(--assume-yes\s+|-y\s+)?(?P<packages>.+)", command_str)
         if m:
             pkgs = m.group("packages").split()
             self.tasks.append(
@@ -458,7 +546,6 @@ class BashNodeVisitor(ast.nodevisitor):
                     "register": self.get_register_name("apt_install"),
                 }
             )
-            # print(f"Installing packages: {pkgs}")
             return False
 
         # yum update
@@ -502,6 +589,7 @@ class BashNodeVisitor(ast.nodevisitor):
                     }
                 )
             else:  # >>
+                mode = self.umask_to_mode(is_dir=False)
                 self.tasks.append(
                     {
                         "name": self.interpret_variable(f"Append text to {redir_file}"),
@@ -510,6 +598,7 @@ class BashNodeVisitor(ast.nodevisitor):
                             "line": text,
                             "create": True,
                             "insertafter": "EOF",
+                            "mode": mode,
                         },
                         "register": self.get_register_name("echo_redirect_append"),
                     }
@@ -549,10 +638,6 @@ class BashNodeVisitor(ast.nodevisitor):
         # 2. if [ "$foo" -eq "wibble" ]; then ... fi
         # The test is in n.parts[1],
         #    body is n.parts[3:]
-        print("x" * 80)
-        print(n.dump())
-        # test_node = n.parts[1] # ListNode
-        # body_nodes = n.parts[3:]
         # when_cond = None
         # breakpoint()
 
@@ -620,7 +705,8 @@ class BashLexParser(Parser):
         # print(f"Parsing {self.file_path} with BashLexParser")
         trees = parser.parse(source)
 
-        visitor = BashNodeVisitor(tasks)
+        visitor = BashNodeVisitor(tasks,self)
         for tree in trees:
             visitor.visit(tree)
+        return visitor.tasks
         return visitor.tasks

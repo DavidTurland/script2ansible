@@ -12,6 +12,10 @@ class Parser:
 
     def get_register_name(self, name):
         """Generate a unique register name for Ansible."""
+        if 'role_name' in self.config:
+            name = f"{self.config['role_name']}_{name}"
         if name not in self.register_names:
-            self.register_names[name] = f"{name}_result"
-        return self.register_names[name]
+            self.register_names[name] = 1
+        else:
+            self.register_names[name] += 1
+        return f"{name}_{self.register_names[name]}"

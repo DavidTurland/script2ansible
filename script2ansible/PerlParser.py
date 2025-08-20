@@ -314,6 +314,10 @@ END {
                     {
                         "name": f"Rename {d.get('from')} to {d.get('to')}",
                         "ansible.builtin.command": f"mv {d.get('from')} {d.get('to')}",
+                        "args" : {
+                            "creates" : d.get('to'),
+                            "removes" : d.get('from'),
+                        }
                     }
                 )
 
@@ -347,8 +351,12 @@ END {
                 elif cmd == "mv" and len(args) > 2:
                     tasks.append(
                         {
-                            "name": f"Rename {args[1]} to {args[2]}",
+                            "name": f"Rename arse {args[1]} to {args[2]}",
                             "ansible.builtin.command": f"mv {args[1]} {args[2]}",
+                            "args" : {
+                                "creates" : args[2],
+                                "removes" : args[1],
+                            }
                         }
                     )
                 else:
@@ -368,7 +376,11 @@ END {
                         tasks.append(
                             {
                                 "name": f"Copy {src} to {dst}",
-                                "ansible.builtin.copy": {"src": src, "dest": dst},
+                                "ansible.builtin.copy": {
+                                    "src": src, 
+                                    "dest": dst,
+                                    "mode": "preserve",
+                                    },
                             }
                         )
                 elif mod == "File::Path" and meth == "make_path":

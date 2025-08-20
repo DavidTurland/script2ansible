@@ -44,22 +44,35 @@ class Processor:
             "Subclasses should implement this method to return tasks."
         )
 
-
+    def get_role_name(self):
+        """
+        meh
+        """
+        raise NotImplementedError(
+            "Subclasses should implement this method to return tasks."
+        )
 class SlackRoleProcessor(Processor):
 
-    def __init__(self, role_dir, role_output_dir, config):
+    def __init__(self, role_dir, role_output_dir, config,**kwargs):
         super().__init__(config)
         self.role_dir = role_dir
+        if 'role_name' in config:
+            self.role_name = config['role_name']
+        else:
+            self.role_name = os.path.basename(self.role_dir)
         self.role_output_dir = role_output_dir
         if not os.path.isdir(self.role_dir):
             logging.error(f"Role Directory not found: {self.role_dir}")
             sys.exit(1)
-        self.role_name = os.path.basename(self.role_dir)
+        
         logging.info(f"Processing Slack role: {self.role_name}")
         self.ansible_role_dir = os.path.join(config["output"], "roles", self.role_name)
 
     def get_output_dir(self):
         return self.role_output_dir
+    
+    def get_role_name(self):
+        return self.role_name
 
     def process(self):
         self.task_containers = []
@@ -101,7 +114,11 @@ class SlackRoleProcessor(Processor):
         logging.info(f"build_ansible_copy {src}  to {dest}")
         return {
             "name": f"Copy {src} to {dest}",
-            "ansible.builtin.copy": {"src": src, "dest": dest, "remote_src": True},
+            "ansible.builtin.copy": {
+                                    "src": src, 
+                                    "dest": dest,
+                                    "mode": "preserve",
+                                    },
         }
 
 

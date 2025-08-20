@@ -1,6 +1,7 @@
 import logging
 
 from .PerlParser import PerlParser
+
 # from .BashParser import BashParser
 from .BashLexParser import BashLexParser as BashParser
 
@@ -23,7 +24,7 @@ class ParserFactory:
                     f"Could not read file for shebang detection: {file_path}: {e}"
                 )
         else:
-            first_line = script_string.split('\n', 1)[0]
+            first_line = script_string.split("\n", 1)[0]
 
         if first_line.startswith("#!"):
             if "perl" in first_line:

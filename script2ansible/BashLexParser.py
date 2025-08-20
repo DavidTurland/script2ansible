@@ -29,8 +29,8 @@ class IfVisitor(ast.nodevisitor):
         then state:
             accrue commands in visitcommand
         fi state:
-           
-            
+
+
 
     IfNode(pos=(290, 334), parts=[
       ReservedwordNode(pos=(290, 292), word='if'),
@@ -114,10 +114,10 @@ class IfVisitor(ast.nodevisitor):
                     self.test_state = "rhs"
                     self.op = word
                 else:
-                    # maybe += 
+                    # maybe +=
                     self.arg_lhs = word
             elif self.test_state == "rhs":
-                # maybe += 
+                # maybe +=
                 self.arg_rhs = word
         else:
             return
@@ -252,18 +252,18 @@ class BashNodeVisitor(ast.nodevisitor):
         """
         del self.stack_variables[var]
 
-    def interpret_variable(self, stringy: str, type: str = 'interpret') -> str:
+    def interpret_variable(self, stringy: str, type: str = "interpret") -> str:
         def replace_var(match):
             var = match.group("var")
             return self.get_variable(var, match.group(0))
 
         def jinja_var(match):
             var = match.group("var")
-            return  f'{{{{ {var} }}}}'
-        
-        if type == 'interpret':
+            return f"{{{{ {var} }}}}"
+
+        if type == "interpret":
             replacer = replace_var
-        elif type == 'jinja':
+        elif type == "jinja":
             replacer = jinja_var
 
         # Replace ${VAR} style
@@ -284,7 +284,8 @@ class BashNodeVisitor(ast.nodevisitor):
         cmd = []
         redir_type = None
         redir_file = None
-        scoped_vars = ScopedVariables(self, context)
+
+        scoped_vars = ScopedVariables(self, context)  # noqa: F841
 
         for part in parts:
             if part.kind == "word":
@@ -392,9 +393,9 @@ class BashNodeVisitor(ast.nodevisitor):
                 {
                     "name": f"Run shell command: {command_str}",
                     "shell": command_str,
-                    "creates" : dest,
-                    "removes" : src,
-                    "register": self.get_register_name('mv'),
+                    "creates": dest,
+                    "removes": src,
+                    "register": self.get_register_name("mv"),
                 }
             )
             # self.tasks.append(
@@ -455,15 +456,20 @@ class BashNodeVisitor(ast.nodevisitor):
             return False
 
         # chmod with optional -R (recursive), numeric mode
-        m = re.match(r"chmod\s+(?P<recursive>-R\s+)?(?P<mode>\d+)\s+(?P<path>\S+)", command_str)
+        m = re.match(
+            r"chmod\s+(?P<recursive>-R\s+)?(?P<mode>\d+)\s+(?P<path>\S+)", command_str
+        )
         if m:
             mode = m.group("mode")
             path = self.interpret_variable(m.group("path"))
             recursive = bool(m.group("recursive"))
             task = {
-                "name": f"Set permissions of {path} to {mode}" + (" recursively" if recursive else ""),
+                "name": f"Set permissions of {path} to {mode}"
+                + (" recursively" if recursive else ""),
                 "ansible.builtin.file": {"path": path, "mode": mode},
-                "register": self.get_register_name("file_permissions" + ("_recursive" if recursive else "")),
+                "register": self.get_register_name(
+                    "file_permissions" + ("_recursive" if recursive else "")
+                ),
             }
             if recursive:
                 task["ansible.builtin.file"]["recurse"] = True
@@ -471,15 +477,21 @@ class BashNodeVisitor(ast.nodevisitor):
             return False
 
         # chmod with optional -R (recursive), symbolic mode
-        m = re.match(r"chmod\s+(?P<recursive>-R\s+)?(?P<mode>[ugoa]+[+-=][rwx]+)\s+(?P<path>\S+)", command_str)
+        m = re.match(
+            r"chmod\s+(?P<recursive>-R\s+)?(?P<mode>[ugoa]+[+-=][rwx]+)\s+(?P<path>\S+)",
+            command_str,
+        )
         if m:
             mode = m.group("mode")
             path = self.interpret_variable(m.group("path"))
             recursive = bool(m.group("recursive"))
             task = {
-                "name": f"Set symbolic permissions of {path} to {mode}" + (" recursively" if recursive else ""),
+                "name": f"Set symbolic permissions of {path} to {mode}"
+                + (" recursively" if recursive else ""),
                 "ansible.builtin.file": {"path": path, "mode": mode},
-                "register": self.get_register_name("file_permissions_symbolic" + ("_recursive" if recursive else "")),
+                "register": self.get_register_name(
+                    "file_permissions_symbolic" + ("_recursive" if recursive else "")
+                ),
             }
             if recursive:
                 task["ansible.builtin.file"]["recurse"] = True
@@ -487,7 +499,10 @@ class BashNodeVisitor(ast.nodevisitor):
             return False
 
         # chown with optional -R (recursive), symbolic mode
-        m = re.match(r"chown\s+(?P<recursive>-R\s+)?(?P<owner>\w+):(?P<group>\w+)\s+(?P<path>\S+)", command_str)
+        m = re.match(
+            r"chown\s+(?P<recursive>-R\s+)?(?P<owner>\w+):(?P<group>\w+)\s+(?P<path>\S+)",
+            command_str,
+        )
         if m:
             owner = m.group("owner")
             group = m.group("group")
@@ -495,19 +510,17 @@ class BashNodeVisitor(ast.nodevisitor):
             path = self.interpret_variable(m.group("path"))
             recursive = bool(m.group("recursive"))
             task = {
-                "name": f"Set owner: group of {owner} :{group}" + (" recursively" if recursive else ""),
-                "ansible.builtin.file": {
-                    "path": path, 
-                    "owner": owner,
-                    "group": group},
-                "register": self.get_register_name("chown" + ("_recursive" if recursive else "")),
+                "name": f"Set owner: group of {owner} :{group}"
+                + (" recursively" if recursive else ""),
+                "ansible.builtin.file": {"path": path, "owner": owner, "group": group},
+                "register": self.get_register_name(
+                    "chown" + ("_recursive" if recursive else "")
+                ),
             }
             if recursive:
                 task["ansible.builtin.file"]["recurse"] = True
             self.tasks.append(task)
             return False
-
-
 
         # apt update
         if re.match(r"apt(-get)?\s+update", command_str):
@@ -532,7 +545,10 @@ class BashNodeVisitor(ast.nodevisitor):
             return False
 
         # apt install (support optional --assume-yes or -y)
-        m = re.match(r"apt(-get)?\s+install\s+(--assume-yes\s+|-y\s+)?(?P<packages>.+)", command_str)
+        m = re.match(
+            r"apt(-get)?\s+install\s+(--assume-yes\s+|-y\s+)?(?P<packages>.+)",
+            command_str,
+        )
         if m:
             pkgs = m.group("packages").split()
             self.tasks.append(
@@ -691,10 +707,6 @@ class BashLexParser(Parser):
         https://github.com/idank/bashlex/blob/master/examples/commandsubstitution-remover.py
         """
         tasks = []
-        current_command = ""
-        current_umask = "022"
-        last_register = None
-        last_status_cond = None
         source = None
         if self.file_path:
             with open(self.file_path, "r") as file:
@@ -705,7 +717,7 @@ class BashLexParser(Parser):
         # print(f"Parsing {self.file_path} with BashLexParser")
         trees = parser.parse(source)
 
-        visitor = BashNodeVisitor(tasks,self)
+        visitor = BashNodeVisitor(tasks, self)
         for tree in trees:
             visitor.visit(tree)
         return visitor.tasks

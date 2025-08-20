@@ -29,8 +29,10 @@ if __name__ == "__main__":
         help="type of thing to generate (role or playbook)",
     )
 
-    parser.add_argument("--role_name", 
-                        help="ansible role name - overrides implied or defines when missing ")
+    parser.add_argument(
+        "--role_name",
+        help="ansible role name - overrides implied or defines when missing ",
+    )
 
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
@@ -103,6 +105,4 @@ if __name__ == "__main__":
                 f"Input path {args.input} is not a file for Bash processing."
             )
     else:
-        raise ValueError(
-            f"Unknown type: {args.type}"
-        )   
+        raise ValueError(f"Unknown type: {args.type}")

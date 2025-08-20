@@ -51,26 +51,28 @@ class Processor:
         raise NotImplementedError(
             "Subclasses should implement this method to return tasks."
         )
+
+
 class SlackRoleProcessor(Processor):
 
-    def __init__(self, role_dir, role_output_dir, config,**kwargs):
+    def __init__(self, role_dir, role_output_dir, config, **kwargs):
         super().__init__(config)
         self.role_dir = role_dir
-        if 'role_name' in config:
-            self.role_name = config['role_name']
+        if "role_name" in config:
+            self.role_name = config["role_name"]
         else:
             self.role_name = os.path.basename(self.role_dir)
         self.role_output_dir = role_output_dir
         if not os.path.isdir(self.role_dir):
             logging.error(f"Role Directory not found: {self.role_dir}")
             sys.exit(1)
-        
+
         logging.info(f"Processing Slack role: {self.role_name}")
         self.ansible_role_dir = os.path.join(config["output"], "roles", self.role_name)
 
     def get_output_dir(self):
         return self.role_output_dir
-    
+
     def get_role_name(self):
         return self.role_name
 
@@ -82,7 +84,9 @@ class SlackRoleProcessor(Processor):
             script_name = os.path.join(script_dir, fname)
             if os.path.isfile(script_name):
                 logging.info(f"{script_name} found, processing...")
-                parser = ParserFactory.get_parser(file_path=script_name, config=self.config)
+                parser = ParserFactory.get_parser(
+                    file_path=script_name, config=self.config
+                )
                 task_container.tasks = parser.parse()
             self.task_containers.append(task_container)
         files_dir = os.path.join(self.role_dir, "files")
@@ -115,10 +119,10 @@ class SlackRoleProcessor(Processor):
         return {
             "name": f"Copy {src} to {dest}",
             "ansible.builtin.copy": {
-                                    "src": src, 
-                                    "dest": dest,
-                                    "mode": "preserve",
-                                    },
+                "src": src,
+                "dest": dest,
+                "mode": "preserve",
+            },
         }
 
 
@@ -144,4 +148,3 @@ class BashProcessor(Processor):
             self.config["generator"], self, self.config.get("output_format", "yaml")
         )
         generator.generate()
-

@@ -160,7 +160,9 @@ END {
 """
 
     def __init__(self, file_path=None, script_string=None, config=None):
-        super().__init__(file_path=file_path, config=config, script_string=script_string)
+        super().__init__(
+            file_path=file_path, config=config, script_string=script_string
+        )
         if self.file_path:
             original = Path(self.file_path)
             self.instrumented_path = original.parent / "instrumented.pl"
@@ -201,7 +203,9 @@ END {
             + self.INSTRUMENTATION_CODE_SUFFIX
         )
         self.instrumentation_packages = set()
-        for match in re.finditer(r'^\s*package\s+([A-Za-z0-9_:]+)', self.instrumentation_code, re.MULTILINE):
+        for match in re.finditer(
+            r"^\s*package\s+([A-Za-z0-9_:]+)", self.instrumentation_code, re.MULTILINE
+        ):
             pkg = match.group(1)
             self.instrumentation_packages.add(pkg)
 
@@ -214,13 +218,13 @@ END {
             matched = False
             for pkg in self.instrumentation_packages:
                 # Match 'use Package::Name;' possibly with whitespace
-                if re.match(rf'^\s*use\s+{re.escape(pkg)}\s*;', line):
+                if re.match(rf"^\s*use\s+{re.escape(pkg)}\s*;", line):
                     commented_lines.append(f"# {line}")
                     matched = True
                     break
             if not matched:
                 commented_lines.append(line)
-        preprocessed_code = "\n".join(commented_lines)  
+        preprocessed_code = "\n".join(commented_lines)
         return preprocessed_code
 
     # ---------- Step 1: Generate instrumented.pl ----------
@@ -234,11 +238,7 @@ END {
 
         preprocessed_code = self.preprocess_code(original_code)
 
-        self.instrumented_code = (
-            self.instrumentation_code
-            + "\n"
-            + preprocessed_code
-        )
+        self.instrumented_code = self.instrumentation_code + "\n" + preprocessed_code
 
         with open(self.instrumented_path, "w") as f:
             f.write(self.instrumented_code)
@@ -314,10 +314,10 @@ END {
                     {
                         "name": f"Rename {d.get('from')} to {d.get('to')}",
                         "ansible.builtin.command": f"mv {d.get('from')} {d.get('to')}",
-                        "args" : {
-                            "creates" : d.get('to'),
-                            "removes" : d.get('from'),
-                        }
+                        "args": {
+                            "creates": d.get("to"),
+                            "removes": d.get("from"),
+                        },
                     }
                 )
 
@@ -353,10 +353,10 @@ END {
                         {
                             "name": f"Rename arse {args[1]} to {args[2]}",
                             "ansible.builtin.command": f"mv {args[1]} {args[2]}",
-                            "args" : {
-                                "creates" : args[2],
-                                "removes" : args[1],
-                            }
+                            "args": {
+                                "creates": args[2],
+                                "removes": args[1],
+                            },
                         }
                     )
                 else:
@@ -377,10 +377,10 @@ END {
                             {
                                 "name": f"Copy {src} to {dst}",
                                 "ansible.builtin.copy": {
-                                    "src": src, 
+                                    "src": src,
                                     "dest": dst,
                                     "mode": "preserve",
-                                    },
+                                },
                             }
                         )
                 elif mod == "File::Path" and meth == "make_path":

@@ -5,8 +5,9 @@ import os
 
 class IndenterDumper(yaml.Dumper):
     """Custom YAML dumper to handle indentation correctly.
-      at least it keeps ansible lint happy
+    at least it keeps ansible lint happy
     """
+
     def increase_indent(self, flow=False, indentless=False):
         return super(IndenterDumper, self).increase_indent(flow, False)
 
@@ -52,7 +53,12 @@ class GeneratorRole:
             output = (
                 json.dumps(tasks, indent=2)
                 if self.output_format == "json"
-                else yaml.dump(tasks, sort_keys=False, Dumper=IndenterDumper, default_flow_style=False)
+                else yaml.dump(
+                    tasks,
+                    sort_keys=False,
+                    Dumper=IndenterDumper,
+                    default_flow_style=False,
+                )
             )
             ofile_name = os.path.join(
                 self.processor.get_output_dir(), "tasks", f"{tasks_name}.yml"
@@ -75,7 +81,12 @@ class GeneratorRoleTasks:
             output = (
                 json.dumps(tasks, indent=2)
                 if self.output_format == "json"
-                else yaml.dump(tasks, sort_keys=False, Dumper=IndenterDumper, default_flow_style=False)
+                else yaml.dump(
+                    tasks,
+                    sort_keys=False,
+                    Dumper=IndenterDumper,
+                    default_flow_style=False,
+                )
             )
             with open(self.processor.output_file, "w") as f:
                 f.write(output)
@@ -99,7 +110,12 @@ class GeneratorPlaybook:
         output = (
             json.dumps(playbook, indent=2)
             if self.output_format == "json"
-            else yaml.dump(playbook, sort_keys=False, Dumper=IndenterDumper, default_flow_style=False)
+            else yaml.dump(
+                playbook,
+                sort_keys=False,
+                Dumper=IndenterDumper,
+                default_flow_style=False,
+            )
         )
         with open(self.processor.output_file, "w") as f:
             f.write(output)

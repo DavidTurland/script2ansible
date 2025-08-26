@@ -109,23 +109,23 @@ class CommandVisitor(ast.nodevisitor):
         specs = {
             'cp' : {
                 'ov' : set(),
-                'o' : ('-r',)
+                'o' : {'-r',}
             },
             'ln' : {
                 'ov' : set(),
-                'o' : ('-s',)
+                'o' : {'-s',}
             },
             'scp' : {
-                'ov' : ('-i','-P',),
-                'o' : ('-r',)
+                'ov' : {'-i','-P',},
+                'o' : {'-r',}
             },
             'chmod' : {
                 'ov' : set(),
-                'o' : ('-R','-f','-v',),
+                'o' : {'-R','-f','-v',},
             },
             'chown' : {
                 'ov' : set(),
-                'o' : ('-R','-f','-v','-c',),
+                'o' : {'-R','-f','-v','-c',},
             },
             'umask' :{
                 'ov' : set(),
@@ -133,7 +133,7 @@ class CommandVisitor(ast.nodevisitor):
             },
             'mkdir' :{
                 'ov' : set(),
-                'o' : ('-p',),
+                'o' : {'-p',},
             },
             'ldconfig' :{
                 'ov' : set(),
@@ -144,27 +144,27 @@ class CommandVisitor(ast.nodevisitor):
                 'o' : set(),
             },
             'apt' :{
-                'sub_cmd': ('update','install', 'upgrade'),
+                'sub_cmd': {'update','install', 'upgrade'},
                 'ov' : set(),
-                'o' : ('-y','update','install', 'upgrade'), #meh
+                'o' : {'-y','update','install', 'upgrade'}, #meh
             },
             'apt-get' :{
-                'sub_cmd': ('update','install', 'upgrade'),
+                'sub_cmd': {'update','install', 'upgrade'},
                 'ov' : set(),
-                'o' : ('-y','update','install', 'upgrade'), #meh
+                'o' : {'-y','update','install', 'upgrade'}, #meh
             },
             'yum' :{
-                'sub_cmd': ('update','install', 'upgrade'),
+                'sub_cmd': {'update','install', 'upgrade'},
                 'ov' : set(),
-                'o' : ('-y','update','install', 'upgrade'), #meh
+                'o' : {'-y','update','install', 'upgrade'}, #meh
             },
             'echo' :{
                 'ov' : set(),
-                'o' : ('-y',),
+                'o' : {'-y',},
             },
             'touch' :{
                 'ov' : set(),
-                'o' : ('-a','-c'),
+                'o' : {'-a','-c'},
             },
               
         }

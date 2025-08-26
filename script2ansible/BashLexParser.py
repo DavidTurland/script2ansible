@@ -17,7 +17,174 @@ class ScopedVariables:
             for k in self.context.keys():
                 self.parent.pop_variable(k)
 
+class CommandVisitor(ast.nodevisitor):
+    def __init__(self, parent):
+        self.parent = parent
+        self.cmd = None
+        self.sub_cmd = None # eg the get in 'apt get'
+        self.parsed_args = []
+        self.args = []
+        self.options = {}
+        self.redir_type = None
+        self.redir_file = None
+        self.is_command= True
 
+    def visitword(self, n, word):
+        if self.cmd is None:
+            self.cmd = word
+        else:
+            self.parsed_args.append(word)     
+        return False
+    
+    def visitcommand(self, n, parts):
+        for child in n.parts:
+            self.visit(child)
+        self.process_command()
+        return False
+    
+    def visitredirect(self, n, input, type, output, heredoc):
+        """CommandNode(pos=(258, 289), parts=[
+        WordNode(pos=(258, 262), word='echo'),
+        WordNode(pos=(263, 271), word='append'),
+        RedirectNode(output=
+            WordNode(pos=(275, 289), word='/tmp/hello.txt'), pos=(272, 289), type='>>'),
+        ])"""
+        if type in (">", ">>"):
+            # breakpoint()  # Debugging point
+            self.redir_type = type
+            self.redir_file = output.word
+        elif type in ("<",):
+            self.redir_type = type
+            self.redir_file = input.word 
+
+    def visitassignment(self, n, word):
+        """    .CommandNode(pos=(0, 12), parts=[
+        AssignmentNode(pos=(0, 12), word='MYVAR=wibble'),
+        ])"""
+        if "=" in n.word:
+            var, val = n.word.split("=", 1)
+            self.parent.set_variable(var, val)
+
+            self.is_command= False
+        # self.tasks.append({"_set_var": (var, val)})
+        return False
+
+    def visitparameter(self, n, value):   
+        """
+        WordNode(pos=(58, 71), word='/tmp/bar_${s}', parts=[
+            ParameterNode(pos=(67, 71), value='s'),
+        ]),
+        """
+        pass
+
+    def process_args(self,spec):
+
+        ov = spec.get('ov',{})
+        o = spec.get('o',{})
+        sub_cmd = spec.get('sub_cmd',{})
+
+
+        self.options = {}
+        self.args = []
+        prev = None
+        for index, arg in enumerate(self.parsed_args):
+            # if arg.startswith('-'):
+            if (index == 0 and (arg in sub_cmd)):
+                self.sub_cmd = arg
+                continue
+            if arg in o:
+                self.options[arg] = 1
+                prev = None
+            elif arg in ov:
+                prev = arg
+            elif prev is not None:
+                self.options[prev] = arg
+                prev = None
+            else:
+                self.args.append(arg)
+        return True
+            
+    def process_command(self):
+
+        specs = {
+            'cp' : {
+                'ov' : set(),
+                'o' : ('-r',)
+            },
+            'ln' : {
+                'ov' : set(),
+                'o' : ('-s',)
+            },
+            'scp' : {
+                'ov' : ('-i','-P',),
+                'o' : ('-r',)
+            },
+            'chmod' : {
+                'ov' : set(),
+                'o' : ('-R','-f','-v',),
+            },
+            'chown' : {
+                'ov' : set(),
+                'o' : ('-R','-f','-v','-c',),
+            },
+            'umask' :{
+                'ov' : set(),
+                'o' : set(),
+            },
+            'mkdir' :{
+                'ov' : set(),
+                'o' : ('-p',),
+            },
+            'ldconfig' :{
+                'ov' : set(),
+                'o' : set(),
+            },
+            'gunzip' :{
+                'ov' : set(),
+                'o' : set(),
+            },
+            'apt' :{
+                'sub_cmd': ('update','install', 'upgrade'),
+                'ov' : set(),
+                'o' : ('-y','update','install', 'upgrade'), #meh
+            },
+            'apt-get' :{
+                'sub_cmd': ('update','install', 'upgrade'),
+                'ov' : set(),
+                'o' : ('-y','update','install', 'upgrade'), #meh
+            },
+            'yum' :{
+                'sub_cmd': ('update','install', 'upgrade'),
+                'ov' : set(),
+                'o' : ('-y','update','install', 'upgrade'), #meh
+            },
+            'echo' :{
+                'ov' : set(),
+                'o' : ('-y',),
+            },
+            'touch' :{
+                'ov' : set(),
+                'o' : ('-a','-c'),
+            },
+              
+        }
+        # breakpoint()
+        if self.is_command:
+            if self.cmd not in specs:
+                breakpoint()
+                print(f" failed to find {self.cmd}")
+                pass
+            else:
+                spec = specs[self.cmd]
+                #if self.cmd == 'apt':
+                #    breakpoint()
+                self.process_args(spec)                   
+            # print(f"---- finishing {self.cmd} ")
+        else:
+            pass
+            # print(f"---- finishing  assignment ")
+
+        pass
 class IfVisitor(ast.nodevisitor):
     """
         visit 'if' loops
@@ -250,7 +417,8 @@ class BashNodeVisitor(ast.nodevisitor):
         """
         deletes a scoped variable
         """
-        del self.stack_variables[var]
+        if var in self.stack_variables:
+            del self.stack_variables[var]
 
     def interpret_variable(self, stringy: str, type: str = "interpret") -> str:
         def replace_var(match):
@@ -281,10 +449,13 @@ class BashNodeVisitor(ast.nodevisitor):
 
     def visitcommand(self, n, parts, context=None):
         # Build the command string from parts
+
+
         cmd = []
         redir_type = None
         redir_file = None
-
+        # print (n.dump())
+        # breakpoint()
         scoped_vars = ScopedVariables(self, context)  # noqa: F841
 
         for part in parts:
@@ -300,19 +471,18 @@ class BashNodeVisitor(ast.nodevisitor):
                 # Recursively visit other nodes
                 self.visit(part)
         command_str = " ".join(cmd)
-
-        # Match and capture supported commands
-        # umask
-        m = re.match(r"umask\s+(?P<mask>\d{3,4})", command_str)
-        if m:
-            self.current_umask = m.group("mask")
+        # print(f"---------------- visiting CommandVisitor with {command_str}")
+        # breakpoint()
+        cv = CommandVisitor(self)
+        cv.visit(n)
+        if 'umask' == cv.cmd:
+            self.current_umask = cv.args[0]
             return False
-
-        # mkdir
-        m = re.match(r"mkdir\s+(-p\s+)?(?P<path>\S+)", command_str)
-        if m:
+        elif 'mkdir' == cv.cmd:
+            # breakpoint()
+            arg_path = cv.args[0]
             mode = self.umask_to_mode(is_dir=True)
-            path = self.interpret_variable(m.group("path"))
+            path = self.interpret_variable(arg_path)
             self.tasks.append(
                 {
                     "name": f"Ensure directory {path} exists",
@@ -324,13 +494,10 @@ class BashNodeVisitor(ast.nodevisitor):
                     "register": self.get_register_name("mkdir"),
                 }
             )
-            return False
-
-        # touch
-        m = re.match(r"touch\s+(?P<path>\S+)", command_str)
-        if m:
+        elif 'touch' == cv.cmd:
+            arg_path = cv.args[0]
             mode = self.umask_to_mode(is_dir=False)
-            path = self.interpret_variable(m.group("path"))
+            path = self.interpret_variable(arg_path)
             self.tasks.append(
                 {
                     "name": f"Ensure file {path} exists",
@@ -342,14 +509,10 @@ class BashNodeVisitor(ast.nodevisitor):
                     "register": self.get_register_name("touch_file"),
                 }
             )
-            return False
-
-        # ln
-        m = re.match(r"ln(\s+-s)?\s+(?P<src>\S+)\s+(?P<dest>\S+)", command_str)
-        if m:
-            is_symlink = bool(m.group(1))
-            src = self.interpret_variable(m.group("src"))
-            dest = self.interpret_variable(m.group("dest"))
+        elif 'ln' == cv.cmd:
+            is_symlink = '-s' in cv.options
+            src = self.interpret_variable(cv.args[0])
+            dest = self.interpret_variable(cv.args[1])
             # TODO directory?
             mode = self.umask_to_mode(is_dir=False)
             self.tasks.append(
@@ -364,13 +527,9 @@ class BashNodeVisitor(ast.nodevisitor):
                     "register": self.get_register_name("ln"),
                 }
             )
-            return False
-
-        # cp
-        m = re.match(r"cp\s+(-[a-zA-Z]+\s+)?(?P<src>\S+)\s+(?P<dest>\S+)", command_str)
-        if m:
-            src = self.interpret_variable(m.group("src"))
-            dest = self.interpret_variable(m.group("dest"))
+        elif 'cp' == cv.cmd:
+            src = self.interpret_variable(cv.args[0])
+            dest = self.interpret_variable(cv.args[1])
             self.tasks.append(
                 {
                     "name": f"Copy {src} to {dest}",
@@ -382,12 +541,54 @@ class BashNodeVisitor(ast.nodevisitor):
                     "register": self.get_register_name("copy_file"),
                 }
             )
-            return False
-        # mv
-        m = re.match(r"mv\s+(?P<src>\S+)\s+(?P<dest>\S+)", command_str)
-        if m:
-            src = self.interpret_variable(m.group("src"))
-            dest = self.interpret_variable(m.group("dest"))
+        elif 'scp' == cv.cmd:
+            scp_options = cv.options
+            remote_pattern = re.compile(
+                r"^(?:(?P<user>[^@]+)@)?(?P<host>[^:]+):(?P<path>.+)$"
+            )
+            def split_target(target):
+                rm = remote_pattern.match(target)
+                if rm:
+                    return rm.groupdict()
+                else:
+                    return {"user": None, "host": None, "path": target}
+            scp_src = split_target(cv.args[0])
+            # NOTE scp '-r'      Recursively copy entire directories.  Note that scp follows symbolic links encountered in the tree traversal.
+            # NOTE ansible.builtin.copy 'src'
+            # If path is a directory, it is copied recursively. In this case, 
+            # if path ends with /, only inside contents of that directory are copied to
+            # destination. Otherwise, if it does not end with /, the directory itself 
+            # with all contents is copied. This behavior is similar to the rsync command line tool.
+            scp_dest = split_target(cv.args[1])
+
+            # TODO compare and contrast:
+            # self.pull &&
+            # scp_src['remote_host']
+            # scp_dest['remote_host']
+            # and and look at options
+            validate_request= {'op' : 'scp'}
+            if 'host' in scp_src:
+                validate_request['src_host'] = True
+            elif 'host' in scp_dest:
+                validate_request['dest_host'] = True
+            validate_response = self.parser.validate_command(validate_request)
+            if 'accept' == validate_response["status"]:
+                self.tasks.append(
+                    {
+                        "name": f"Scp {scp_src['path']} to {scp_dest['path']}",
+                        "ansible.builtin.copy": {
+                            "src": scp_src['path'],
+                            "dest": scp_dest['path'],
+                            "remote_src": False,
+                        },
+                        "register": self.get_register_name("copy_file"),
+                    }
+                )
+            else:
+                print(f"scp skipping command {command_str}")  
+        elif 'mv' == cv.cmd:
+            src = self.interpret_variable(cv.args[0])
+            dest = self.interpret_variable(cv.args[1])
             command_str = f"mv {src} {dest}"
             self.tasks.append(
                 {
@@ -398,21 +599,7 @@ class BashNodeVisitor(ast.nodevisitor):
                     "register": self.get_register_name("mv"),
                 }
             )
-            # self.tasks.append(
-            #     {
-            #         "name": f"Copy {src} to {dest}",
-            #         "ansible.builtin.copy": {
-            #             "src": src,
-            #             "dest": dest,
-            #             "remote_src": False,
-            #         },
-            #         "register": self.get_register_name("copy_file"),
-            #     }
-            # )
-            return False
-
-        # ldconfig
-        if command_str.startswith("ldconfig"):
+        elif 'ldconfig' == cv.cmd:
             reg_name = self.get_register_name("ldconfig")
             self.tasks.append(
                 {
@@ -422,12 +609,8 @@ class BashNodeVisitor(ast.nodevisitor):
                     "changed_when": f"'changed' in {reg_name}.stdout or 'updated' in {reg_name}.stdout",
                 }
             )
-            return False
-
-        # gunzip
-        m = re.match(r"gunzip\s+(?P<path>\S+)", command_str)
-        if m:
-            path = self.interpret_variable(m.group("path"))
+        elif 'gunzip' == cv.cmd:            
+            path = self.interpret_variable(cv.args[0])
             self.tasks.append(
                 {
                     "name": f"Extract GZ archive {path}",
@@ -437,78 +620,11 @@ class BashNodeVisitor(ast.nodevisitor):
                         "dest": "/tmp",
                     },
                     "register": self.get_register_name("extract_gz"),
-                }
-            )
-            return False
-
-        # chmod with numeric mode (e.g., chmod 0700 /path)
-        m = re.match(r"chmod\s+(?P<mode>\d+)\s+(?P<path>\S+)", command_str)
-        if m:
-            mode = m.group("mode")
-            path = self.interpret_variable(m.group("path"))
-            self.tasks.append(
-                {
-                    "name": f"Set permissions of {path} to {mode}",
-                    "ansible.builtin.file": {"path": path, "mode": mode},
-                    "register": self.get_register_name("file_permissions"),
-                }
-            )
-            return False
-
-        # chmod with optional -R (recursive), numeric mode
-        m = re.match(
-            r"chmod\s+(?P<recursive>-R\s+)?(?P<mode>\d+)\s+(?P<path>\S+)", command_str
-        )
-        if m:
-            mode = m.group("mode")
-            path = self.interpret_variable(m.group("path"))
-            recursive = bool(m.group("recursive"))
-            task = {
-                "name": f"Set permissions of {path} to {mode}"
-                + (" recursively" if recursive else ""),
-                "ansible.builtin.file": {"path": path, "mode": mode},
-                "register": self.get_register_name(
-                    "file_permissions" + ("_recursive" if recursive else "")
-                ),
-            }
-            if recursive:
-                task["ansible.builtin.file"]["recurse"] = True
-            self.tasks.append(task)
-            return False
-
-        # chmod with optional -R (recursive), symbolic mode
-        m = re.match(
-            r"chmod\s+(?P<recursive>-R\s+)?(?P<mode>[ugoa]+[+-=][rwx]+)\s+(?P<path>\S+)",
-            command_str,
-        )
-        if m:
-            mode = m.group("mode")
-            path = self.interpret_variable(m.group("path"))
-            recursive = bool(m.group("recursive"))
-            task = {
-                "name": f"Set symbolic permissions of {path} to {mode}"
-                + (" recursively" if recursive else ""),
-                "ansible.builtin.file": {"path": path, "mode": mode},
-                "register": self.get_register_name(
-                    "file_permissions_symbolic" + ("_recursive" if recursive else "")
-                ),
-            }
-            if recursive:
-                task["ansible.builtin.file"]["recurse"] = True
-            self.tasks.append(task)
-            return False
-
-        # chown with optional -R (recursive), symbolic mode
-        m = re.match(
-            r"chown\s+(?P<recursive>-R\s+)?(?P<owner>\w+):(?P<group>\w+)\s+(?P<path>\S+)",
-            command_str,
-        )
-        if m:
-            owner = m.group("owner")
-            group = m.group("group")
-
-            path = self.interpret_variable(m.group("path"))
-            recursive = bool(m.group("recursive"))
+                })
+        elif 'chown' == cv.cmd:
+            (owner,group) = cv.args[0].split(":")
+            path = self.interpret_variable(cv.args[1])
+            recursive = '-R' in cv.options
             task = {
                 "name": f"Set owner: group of {owner} :{group}"
                 + (" recursively" if recursive else ""),
@@ -520,132 +636,95 @@ class BashNodeVisitor(ast.nodevisitor):
             if recursive:
                 task["ansible.builtin.file"]["recurse"] = True
             self.tasks.append(task)
-            return False
-
-        # apt update
-        if re.match(r"apt(-get)?\s+update", command_str):
-            self.tasks.append(
-                {
-                    "name": "Update APT package cache",
-                    "ansible.builtin.apt": {"update_cache": True},
-                    "register": self.get_register_name("apt_update"),
-                }
-            )
-            return False
-
-        # apt upgrade
-        if re.match(r"apt(-get)?\s+upgrade", command_str):
-            self.tasks.append(
-                {
-                    "name": "Upgrade all packages",
-                    "ansible.builtin.apt": {"upgrade": "dist"},
-                    "register": self.get_register_name("apt_upgrade"),
-                }
-            )
-            return False
-
-        # apt install (support optional --assume-yes or -y)
-        m = re.match(
-            r"apt(-get)?\s+install\s+(--assume-yes\s+|-y\s+)?(?P<packages>.+)",
-            command_str,
-        )
-        if m:
-            pkgs = m.group("packages").split()
-            self.tasks.append(
-                {
-                    "name": f"Install packages: {' '.join(pkgs)}",
-                    "ansible.builtin.apt": {
-                        "name": pkgs,
-                        "state": "present",
-                        "update_cache": True,
-                    },
-                    "register": self.get_register_name("apt_install"),
-                }
-            )
-            return False
-
-        # yum update
-        if re.match(r"yum\s+update(\s+-y)?", command_str):
-            self.tasks.append(
-                {
-                    "name": "Update YUM package cache",
-                    "ansible.builtin.yum": {
-                        "name": "*",
-                        "state": "latest",
-                    },
-                    "register": self.get_register_name("yum_update"),
-                }
-            )
-            return False
-
-        # yum install
-        m = re.match(r"yum\s+install\s+(-y\s+)?(?P<packages>.+)", command_str)
-        if m:
-            pkgs = m.group("packages").split()
-            self.tasks.append(
-                {
-                    "name": f"Install packages: {' '.join(pkgs)}",
-                    "ansible.builtin.yum": {"name": pkgs, "state": "present"},
-                    "register": self.get_register_name("yum_install"),
-                }
-            )
-            return False
-
-        # echo with redirect
-        m = re.match(r'echo\s+(?P<text>".+?"|\'.+?\'|.+)', command_str)
-        if m and redir_type and redir_file:
-            text = m.group("text").strip("\"'")
-            text = self.interpret_variable(text)
-            if redir_type == ">":
-                self.tasks.append(
-                    {
-                        "name": f"Write text to {redir_file}",
-                        "ansible.builtin.copy": {"dest": redir_file, "content": text},
-                        "register": self.get_register_name("echo_redirect"),
-                    }
-                )
-            else:  # >>
-                mode = self.umask_to_mode(is_dir=False)
-                self.tasks.append(
-                    {
-                        "name": self.interpret_variable(f"Append text to {redir_file}"),
-                        "ansible.builtin.lineinfile": {
-                            "path": redir_file,
-                            "line": text,
-                            "create": True,
-                            "insertafter": "EOF",
-                            "mode": mode,
+        elif 'chmod' == cv.cmd:
+            mode = self.interpret_variable(cv.args[0])
+            path = self.interpret_variable(cv.args[1])
+            # n_num = re.match(f"(?P<mode>\d+)", mode, )
+            # m_sym = re.match(r"(?P<mode>[ugoa]+[+-=][rwx]+)", mode, )
+            recursive = '-R' in cv.options
+            task = {
+                "name": f"Set permissions of {path} to {mode}"
+                + (" recursively" if recursive else ""),
+                "ansible.builtin.file": {
+                         "path": path, 
+                         "mode": mode
                         },
-                        "register": self.get_register_name("echo_redirect_append"),
+                "register": self.get_register_name(
+                    "file_permissions" + ("_recursive" if recursive else "")
+                ),
+            }
+            if recursive:
+                task["ansible.builtin.file"]["recurse"] = True
+            self.tasks.append(task)
+        elif cv.cmd in ('apt', 'apt-get','yum'):
+            ans_builtin = 'yum' if cv.cmd == 'yum' else 'apt'
+            sub_command = cv.sub_cmd
+            if sub_command == 'update':
+                self.tasks.append(
+                    {
+                        "name": "Update APT package cache",
+                        f"ansible.builtin.{ans_builtin}": {"update_cache": True},
+                        "register": self.get_register_name(f"{cv.cmd}_{sub_command}"),
                     }
                 )
-            return False
-
-        # echo without redirect
-        m = re.match(r'echo\s+(?P<text>".+?"|\'.+?\'|.+)', command_str)
-        if m and not redir_type:
-            text = m.group("text").strip("\"'")
-            text = self.interpret_variable(text)
-            self.tasks.append(
-                {"name": f"Echo text: {text}", "ansible.builtin.debug": {"msg": text}}
-            )
-            return False
-
-        # For every command, if it's not a variable assignment, add a register
-        # Only add register for shell commands, not for Ansible builtin tasks
-        # For simplicity, register every shell command as "last_result"
-        # (You may want to refine this for more accurate mapping)
-        # After adding a task, update self.last_register
-        # For shell commands not matched above:
-        if cmd and not command_str.startswith("echo"):
-            self.tasks.append(
-                {
-                    "name": f"Run shell command: {command_str}",
-                    "shell": command_str,
-                    "register": self.get_register_name(cmd),
-                }
-            )
-
+            elif sub_command == 'upgrade':
+                self.tasks.append(
+                        {
+                            "name": "Upgrade all packages",
+                            f"ansible.builtin.{ans_builtin}": {"upgrade": "dist"},
+                            "register": self.get_register_name(f"{cv.cmd}_{sub_command}"),
+                        }
+                    )
+            elif sub_command == 'install':
+                packages = ' '.join(cv.args)
+                self.tasks.append(
+                    {
+                        "name": f"Install packages: {packages}",
+                        f"ansible.builtin.{ans_builtin}": {
+                            "name": packages,
+                            "state": "present",
+                            "update_cache": True,
+                        },
+                        "register": self.get_register_name(f"{cv.cmd}_{sub_command}"),
+                    }
+                )
+        elif 'echo' == cv.cmd:
+            text = cv.args[0]
+            if cv.redir_type in ('>','>>'):
+                redir_type = cv.redir_type
+                redir_file = cv.redir_file
+                if redir_type == ">":
+                    self.tasks.append(
+                        {
+                            "name": f"Write text to {redir_file}",
+                            "ansible.builtin.copy": {"dest": redir_file, "content": text},
+                            "register": self.get_register_name("echo_redirect"),
+                        }
+                    )
+                else:  # >>
+                    mode = self.umask_to_mode(is_dir=False)
+                    self.tasks.append(
+                        {
+                            "name": self.interpret_variable(f"Append text to {redir_file}"),
+                            "ansible.builtin.lineinfile": {
+                                "path": redir_file,
+                                "line": text,
+                                "create": True,
+                                "insertafter": "EOF",
+                                "mode": mode,
+                            },
+                            "register": self.get_register_name("echo_redirect_append"),
+                        }
+                    )
+            else:
+                text = self.interpret_variable(text)
+                self.tasks.append(
+                    {"name": f"Echo text: {text}", 
+                     "ansible.builtin.debug": {
+                         "msg": text
+                         }
+                    }
+                )
         return False
 
     def visitif(self, n, parts):
@@ -687,6 +766,8 @@ class BashNodeVisitor(ast.nodevisitor):
         for part in body_nodes:
             self.visit(part)
         for i in range(before_len, len(self.tasks)):
+
+            # breakpoint()
             if when_cond:
                 self.tasks[i]["when"] = when_cond
         return False
@@ -694,7 +775,6 @@ class BashNodeVisitor(ast.nodevisitor):
     def visitfor(self, n, parts):
         for_visitor = ForVisitor(self)
         for_visitor.visit(n)
-
 
 class BashLexParser(Parser):
     def __init__(self, file_path=None, script_string=None, config=None):

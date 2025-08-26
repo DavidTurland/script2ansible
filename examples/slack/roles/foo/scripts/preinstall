@@ -21,3 +21,5 @@ echo "hello" >> $echo_file
 if [ $? -eq 0 ]; then
    echo "the echo succeeded" >> $echo_success_file
 fi
+chmod ugo+w /tmp/dooby_success.txt
+chown foo:bar  /tmp/dooby_success.txt

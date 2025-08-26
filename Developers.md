@@ -5,7 +5,7 @@ General/common
 
 Bash
 - [ ] Variables: define and/or interpret/template
-- [ ] Environment Variables
+- [ ] Environment Variables 
 - [x] Parse for loops
 - [ ] Parse while loops
 - [ ] support for new pragmas to guide translation (unlikely)

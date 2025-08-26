@@ -263,7 +263,7 @@ END {
         for op in ops:
             t = op.get("type")
             d = op
-
+            pulling = self.pull 
             if t == "file_open":
                 mode = "".join(str(m) for m in d.get("mode", []))
                 if any(m in mode for m in ["w", "a", "+"]):

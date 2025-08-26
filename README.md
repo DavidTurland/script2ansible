@@ -150,7 +150,24 @@ Org::Turland::Helpers::my_sub(%args);
 ```
 
 # Slack Support
-Not that slack, this slack
+Not that slack, this https://github.com/jeviolle/slack
+From the wikki (https://github.com/jeviolle/slack/wiki) : 
+
+## Args
+I believe the role, or subrole name is the only arg passed to the scripts
+
+## Evironment variables
+These are set:
+
+ROOT, STAGE, HOSTNAME, and VERBOSE
+
+## permissions
+When files and directories are copied into the staging area, file permissions are set to 444 (ugo=r) if the file had no executable bit set and 555 (ugo=rx) otherwise. Directory permissions are set to 755 (u=rwx,go=rx). All files and directories are set to have uid 0 and gid 0 (root:root). 
+
+## Script run dirs
+For preinstall and postinstall, the current directory is set to the scripts directory for the current role in the staging area. (This will never be a subrole, since scripts are not run for subroles.)
+
+For fixfiles, the current directory is set to the files directory for the current role in the staging area.
 
 # Usage
 
@@ -227,7 +244,7 @@ python3 -m script2ansible.cli --type slack --generator role examples/slack/roles
 
 
 ```bash
-python3 -m script2ansible.cli --type slack -generator role_tasks examples/slack/roles/bar /tmp
+python3 -m script2ansible.cli --type slack --generator role_tasks examples/slack/roles/bar /tmp
 ```
 
 ```bash

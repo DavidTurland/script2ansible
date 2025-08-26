@@ -126,7 +126,7 @@ class SlackRoleProcessor(Processor):
         }
 
 
-class BashProcessor(Processor):
+class ScriptProcessor(Processor):
     def __init__(self, file_name, config):
         super().__init__(config)
         self.file_name = config["input"]

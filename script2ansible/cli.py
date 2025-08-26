@@ -2,7 +2,7 @@ import argparse
 import os
 import logging
 from .config import load_config
-from .processors import BashProcessor, SlackRoleProcessor
+from .processors import ScriptProcessor, SlackRoleProcessor
 
 
 if __name__ == "__main__":
@@ -13,6 +13,11 @@ if __name__ == "__main__":
     parser.add_argument("output", help="Output  - its complicated")
     parser.add_argument("--json", action="store_true", help="Force JSON output")
     parser.add_argument("--yaml", action="store_true", help="Force YAML output")
+
+
+    parser.add_argument("--pull", action="store_true", default=False, help="Allow commands which are pulling from remote host")
+    parser.add_argument("--push", action="store_true", help="Allow commands which are pushing to the remote (target) ")
+
     parser.add_argument(
         "--strict", action="store_true", help="Strict mode: no shell fallback"
     )
@@ -58,6 +63,8 @@ if __name__ == "__main__":
     if args.role_name:
         config["role_name"] = args.role_name
 
+    config["pull"] = args.get("pull", False)
+    config["push"] = args.get("push", False)
     if args.type == "slack":
         if os.path.isdir(config["input"]):
             dir_name = os.path.basename(config["input"])
@@ -98,7 +105,7 @@ if __name__ == "__main__":
             )
     elif args.type == "script":
         if os.path.isfile(config["input"]):
-            processor = BashProcessor(config["input"], config)
+            processor = ScriptProcessor(config["input"], config)
             processor.process()
         else:
             raise ValueError(

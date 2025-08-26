@@ -4,7 +4,7 @@ from .Parser import Parser
 
 
 class BashParser(Parser):
-    def __init__(self, file_path=None, script_string=None, config=None):
+    def __init__(self, file_path=None, script_string=None, config={}):
         super().__init__(
             file_path=file_path, config=config, script_string=script_string
         )

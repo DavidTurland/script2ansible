@@ -13,8 +13,6 @@ if __name__ == "__main__":
     parser.add_argument("output", help="Output  - its complicated")
     parser.add_argument("--json", action="store_true", help="Force JSON output")
     parser.add_argument("--yaml", action="store_true", help="Force YAML output")
-
-
     parser.add_argument("--pull", action="store_true", default=False, help="Allow commands which are pulling from remote host")
     parser.add_argument("--push", action="store_true", default=False, help="Allow commands which are pushing to the remote (target) ")
 

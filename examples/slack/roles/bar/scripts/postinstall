@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
-use Org::Turland::Local qw(file_state); 
-Org::Turland::Local::file_state((path => '/tmp/wibble.txt'));
+use Org::Turland::Custom qw(file_state); 
+Org::Turland::Custom::file_state((path => '/tmp/wibble.txt'));
 file_state((path => '/tmp/wobble.txt'));
 
 my $filename = "/tmp/wibble.txt";

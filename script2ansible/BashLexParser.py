@@ -12,7 +12,6 @@ class ScopedVariables:
                 parent.push_variable(k, v)
 
     def __del__(self):
-        # breakpoint()
         if self.context:
             for k in self.context.keys():
                 self.parent.pop_variable(k)
@@ -189,23 +188,17 @@ class CommandVisitor(ast.nodevisitor):
                 "o": {"-a", "-c"},
             },
         }
-        # breakpoint()
         if self.is_command:
             if self.cmd not in specs:
                 breakpoint()
                 print(f" failed to find {self.cmd}")
-                pass
             else:
                 spec = specs[self.cmd]
-                # if self.cmd == 'apt':
-                #    breakpoint()
                 self.process_args(spec)
             # print(f"---- finishing {self.cmd} ")
         else:
             pass
             # print(f"---- finishing  assignment ")
-
-        pass
 
 
 class IfVisitor(ast.nodevisitor):
@@ -357,15 +350,11 @@ class ForVisitor(ast.nodevisitor):
 
     def visitreservedword(self, n, word):
         self.state = word
-        if self.state == "do":
-            pass
-            # self.parent.push_var()
-        elif self.state == "done":
+        if self.state == "done":
             for loop_var in self.loop_vars:
                 context = {}
                 context[self.for_var] = loop_var
                 for command in self.commands:
-                    # breakpoint()
                     self.parent.visitcommand(command, command.parts, context=context)
 
     def visitlist(self, n, parts):
@@ -390,7 +379,7 @@ class ForVisitor(ast.nodevisitor):
             pass
 
 
-class BashNodeVisitor(ast.nodevisitor):
+class BashScriptVisitor(ast.nodevisitor):
     def __init__(self, tasks, parser):
         self.tasks = tasks
         self.current_umask = "022"
@@ -414,7 +403,6 @@ class BashNodeVisitor(ast.nodevisitor):
         Generate a unique register name for Ansible.
         TODO: this should be a generator thing maybe?
         """
-        # breakpoint()
         self.last_register = self.parser.get_register_name(name)
         return self.last_register
 
@@ -467,41 +455,16 @@ class BashNodeVisitor(ast.nodevisitor):
         if "=" in n.word:
             var, val = n.word.split("=", 1)
             self.set_variable(var, val)
-        # self.tasks.append({"_set_var": (var, val)})
         return False
 
     def visitcommand(self, n, parts, context=None):
-        # Build the command string from parts
-
-        cmd = []
-        redir_type = None
-        redir_file = None
-        # print (n.dump())
-        # breakpoint()
-        scoped_vars = ScopedVariables(self, context)  # noqa: F841
-
-        for part in parts:
-            if part.kind == "word":
-                cmd.append(part.word)
-            elif part.kind == "redirect":
-                # Only handle > and >> for echo
-                if part.type in (">", ">>"):
-                    # breakpoint()  # Debugging point
-                    redir_type = part.type
-                    redir_file = part.output.word
-            else:
-                # Recursively visit other nodes
-                self.visit(part)
-        command_str = " ".join(cmd)
-        # print(f"---------------- visiting CommandVisitor with {command_str}")
-        # breakpoint()
+        # scoped_vars = ScopedVariables(self, context)  # noqa: F841
         cv = CommandVisitor(self)
         cv.visit(n)
         if "umask" == cv.cmd:
             self.current_umask = cv.args[0]
             return False
         elif "mkdir" == cv.cmd:
-            # breakpoint()
             arg_path = cv.args[0]
             mode = self.umask_to_mode(is_dir=True)
             path = self.interpret_variable(arg_path)
@@ -591,10 +554,11 @@ class BashNodeVisitor(ast.nodevisitor):
             # scp_dest['remote_host']
             # and and look at options
             validate_request = {"op": "scp"}
-            if "host" in scp_src:
+            if bool(scp_src.get("host")):
                 validate_request["src_host"] = True
-            elif "host" in scp_dest:
+            if bool(scp_dest.get("host")):
                 validate_request["dest_host"] = True
+            # breakpoint()
             validate_response = self.parser.validate_command(validate_request)
             if "accept" == validate_response["status"]:
                 self.tasks.append(
@@ -605,11 +569,11 @@ class BashNodeVisitor(ast.nodevisitor):
                             "dest": scp_dest["path"],
                             "remote_src": False,
                         },
-                        "register": self.get_register_name("copy_file"),
+                        "register": self.get_register_name(cv.cmd),
                     }
                 )
             else:
-                print(f"scp skipping command {command_str}")
+                print(f"scp skipping command {cv.cmd}")
         elif "mv" == cv.cmd:
             src = self.interpret_variable(cv.args[0])
             dest = self.interpret_variable(cv.args[1])
@@ -714,7 +678,7 @@ class BashNodeVisitor(ast.nodevisitor):
             text = cv.args[0]
             if cv.redir_type in (">", ">>"):
                 redir_type = cv.redir_type
-                redir_file = cv.redir_file
+                redir_file = self.interpret_variable(cv.redir_file)
                 if redir_type == ">":
                     self.tasks.append(
                         {
@@ -792,8 +756,6 @@ class BashNodeVisitor(ast.nodevisitor):
         for part in body_nodes:
             self.visit(part)
         for i in range(before_len, len(self.tasks)):
-
-            # breakpoint()
             if when_cond:
                 self.tasks[i]["when"] = when_cond
         return False
@@ -820,12 +782,9 @@ class BashLexParser(Parser):
                 source = file.read()
         else:
             source = self.script_string
-        # breakpoint()
-        # print(f"Parsing {self.file_path} with BashLexParser")
         trees = parser.parse(source)
 
-        visitor = BashNodeVisitor(tasks, self)
+        visitor = BashScriptVisitor(tasks, self)
         for tree in trees:
             visitor.visit(tree)
-        return visitor.tasks
         return visitor.tasks

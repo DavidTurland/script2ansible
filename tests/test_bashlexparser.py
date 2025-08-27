@@ -79,7 +79,6 @@ fi
         # Find the echo task with a 'when' condition for variable comparison
         echo_tasks = [t for t in tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
         self.assertTrue(any("when" in t for t in echo_tasks))
-        # breakpoint()
         # The 'when' should reference MYVAR == 'wibble'
         self.assertTrue(any("echo_redirect_append_1" in str(t.get("when", "")) and "succeeded" in str(t.get("when", "")) for t in echo_tasks))
     def test_if_variable_comparison_inline(self):
@@ -94,7 +93,6 @@ fi
         # Find the echo task with a 'when' condition for variable comparison
         echo_tasks = [t for t in tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
         self.assertTrue(any("when" in t for t in echo_tasks))
-        # breakpoint()
         # The 'when' should reference MYVAR == 'wibble'
         self.assertTrue(any("MYVAR" in str(t.get("when", "")) and "wibble" in str(t.get("when", "")) for t in echo_tasks))
     
@@ -107,16 +105,14 @@ do
     ln /tmp/${s}_dest.txt /tmp/bar_${s}_src
 done
             """, config=config)   
-        # parser = BashLexParser(file_path=self.test_script_path, config={})
         tasks = parser.parse()
         self.assertTrue(len(tasks),6)
-        # breakpoint()
         # Find the echo task with a 'when' condition for variable comparison
         #echo_tasks = [t for t in tasks if t.get("ansible.builtin.debug", {}).get("msg") == "matched"]
         #self.assertTrue(any("when" in t for t in echo_tasks))
         # The 'when' should reference MYVAR == 'wibble'
         #self.assertTrue(any("MYVAR" in str(t.get("when", "")) and "wibble" in str(t.get("when", "")) for t in echo_tasks))
-    def test_scp_simple(self):
+    def test_scp_simple_push_and_pull(self):
         config = {"pull" : True,
                   "push" : True,}
         parser = BashLexParser(script_string="""
@@ -128,18 +124,47 @@ scp -P 2222 file.txt user@10.0.0.1:/home/user/
 scp -i ~/.ssh/id_rsa -P 2200 -r ./dir host:/var/tmp/
 
             """, config=config)   
-        # parser = BashLexParser(file_path=self.test_script_path, config={})
         tasks = parser.parse()
-        # breakpoint()
         self.assertTrue(len(tasks),5)
         self.assertEqual(tasks[1]['ansible.builtin.copy']['dest'] ,'/path/to/remote/directory/',"dest dir")
         self.assertEqual(tasks[2]['ansible.builtin.copy']['dest'] ,'/remote/path/',"dest dir")
-        # breakpoint()
+
         # Find the echo task with a 'when' condition for variable comparison
         #echo_tasks = [t for t in tasks if t.get("ansible.builtin.debug", {}).get("msg") == "matched"]
         #self.assertTrue(any("when" in t for t in echo_tasks))
         # The 'when' should reference MYVAR == 'wibble'
         #self.assertTrue(any("MYVAR" in str(t.get("when", "")) and "wibble" in str(t.get("when", "")) for t in echo_tasks))
+    def test_scp_simple_just_push(self):
+        config = {"pull" : False,
+                  "push" : True,}
+        parser = BashLexParser(script_string="""
+scp -i ~/.ssh/id_rsa -P 2200 -r  ./dir                   /var/tmp/
+scp                              user@rh:/local/file.txt /path/to/remote/directory/ 
+scp -r                           ./myfolder              user@host:/remote/path2/
+scp -r                           ./myfolder              user@host:/remote/path/
+scp -P 2222                      file.txt                user@10.0.0.1:/home/user/
+scp -i ~/.ssh/id_rsa -P 2200 -r ./dir                    host:/var/tmp2/
+            """, config=config)   
+        tasks = parser.parse()
+        self.assertEqual(len(tasks),5)
+        self.assertEqual(tasks[1]['ansible.builtin.copy']['dest'] ,'/remote/path2/',"dest dir")
+        self.assertEqual(tasks[2]['ansible.builtin.copy']['dest'] ,'/remote/path/',"dest dir")
+
+    def test_scp_simple_just_pull(self):
+        config = {"pull" : True,
+                  "push" : False,}
+        parser = BashLexParser(script_string="""
+scp -i ~/.ssh/id_rsa -P 2200 -r  ./dir                   /var/tmp/
+scp                              user@rh:/local/file.txt /path/to/remote/directory/ 
+scp -r                           ./myfolder              user@host:/remote/path2/
+scp -r                           ./myfolder              user@host:/remote/path/
+scp -P 2222                      file.txt                user@10.0.0.1:/home/user/
+scp -i ~/.ssh/id_rsa -P 2200 -r ./dir                    host:/var/tmp2/
+            """, config=config)   
+        tasks = parser.parse()
+        self.assertEqual(len(tasks),2)
+        self.assertEqual(tasks[0]['ansible.builtin.copy']['dest'] ,'/var/tmp/',"dest dir")
+        self.assertEqual(tasks[1]['ansible.builtin.copy']['dest'] ,'/path/to/remote/directory/',"dest dir")
 
 if __name__ == "__main__":
     unittest.main()

@@ -248,6 +248,9 @@ END {
         cmd = ["perl", self.instrumented_path] + args
         result = subprocess.run(cmd, capture_output=True, text=True)
         stdout_lines = result.stdout.splitlines()
+        if 0 != result.returncode:
+            logging.error(f" failed with {result.returncode} {result.stderr}") 
+            sys.exit(-1)
         return stdout_lines
 
     # ---------- Step 3: Load JSON log ----------

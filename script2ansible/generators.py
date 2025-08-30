@@ -40,11 +40,12 @@ class GeneratorRole:
                     f.write(stub_content)
 
     def generate(self):
-
-        self.create_role_structure()
         task_containers = self.processor.get_tasks()
+        self.create_role_structure()
+
         tasks_dir = os.path.join(self.processor.get_output_dir(), "tasks")
         os.makedirs(tasks_dir, exist_ok=True)
+        main_tasks = []
         for task_container in task_containers:
             if not task_container.get_tasks():
                 continue
@@ -65,6 +66,22 @@ class GeneratorRole:
             )
             with open(ofile_name, "w") as f:
                 f.write(output)
+            main_tasks.append({'include_tasks': f"{tasks_name}.yml"})
+        output = (
+                json.dumps(main_tasks, indent=2)
+                if self.output_format == "json"
+                else yaml.dump(
+                    main_tasks,
+                    sort_keys=False,
+                    Dumper=IndenterDumper,
+                    default_flow_style=False,
+                )
+        )         
+        ofile_name = os.path.join(
+            self.processor.get_output_dir(), "tasks", "main.yml"
+        )
+        with open(ofile_name, "w") as f:
+            f.write(output)
 
 
 class GeneratorRoleTasks:

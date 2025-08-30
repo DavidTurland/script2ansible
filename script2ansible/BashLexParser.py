@@ -212,7 +212,7 @@ class IfVisitor(ast.nodevisitor):
         then state:
             accrue commands in visitcommand
         fi state:
-
+        TODO: we can probably bring this back into BashScriptParser
 
 
     IfNode(pos=(290, 334), parts=[
@@ -243,6 +243,17 @@ class IfVisitor(ast.nodevisitor):
         self.state = None
         self.test_state = "lhs"
         self.commands = []
+        # what is the (boolean) result of the if-test
+        # eg (3 == 3) , ie True
+        self.result = None
+
+        # is the if-test testing the return code of the previous 
+        # command
+        self.test_return_code = None
+
+        # what is the expression (in python) beeing tested
+        # eg "($FOO == 3)"
+        self.result_str = None
 
     def get_commands(self):
         return self.commands

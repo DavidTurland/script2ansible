@@ -1,7 +1,7 @@
 # TODO
 General/common
 - [ ] Nailing down push, vs pull logic
-- [ ] sub roles in slack (webserver.main, webserver.failover)
+- [x] sub roles in slack (webserver.main, webserver.failover)
 
 Bash
 - [ ] Variables: define and/or interpret/template

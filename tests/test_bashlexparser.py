@@ -1,6 +1,6 @@
 import unittest
 import os
-from script2ansible.BashLexParser import BashLexParser
+from script2ansible.BashLexParser import BashLexParser, BashScriptVisitor
 
 class TestBashLexParser(unittest.TestCase):
     def setUp(self):
@@ -81,6 +81,7 @@ fi
         self.assertTrue(any("when" in t for t in echo_tasks))
         # The 'when' should reference MYVAR == 'wibble'
         self.assertTrue(any("echo_redirect_append_1" in str(t.get("when", "")) and "succeeded" in str(t.get("when", "")) for t in echo_tasks))
+
     def test_if_variable_comparison_inline(self):
         config = {}
         parser = BashLexParser(script_string="""
@@ -134,6 +135,7 @@ scp -i ~/.ssh/id_rsa -P 2200 -r ./dir host:/var/tmp/
         #self.assertTrue(any("when" in t for t in echo_tasks))
         # The 'when' should reference MYVAR == 'wibble'
         #self.assertTrue(any("MYVAR" in str(t.get("when", "")) and "wibble" in str(t.get("when", "")) for t in echo_tasks))
+
     def test_scp_simple_just_push(self):
         config = {"pull" : False,
                   "push" : True,}
@@ -165,6 +167,29 @@ scp -i ~/.ssh/id_rsa -P 2200 -r ./dir                    host:/var/tmp2/
         self.assertEqual(len(tasks),2)
         self.assertEqual(tasks[0]['ansible.builtin.copy']['dest'] ,'/var/tmp/',"dest dir")
         self.assertEqual(tasks[1]['ansible.builtin.copy']['dest'] ,'/path/to/remote/directory/',"dest dir")
+
+
+    def test_split_host(self):
+        bv = BashScriptVisitor(tasks=None,parser=None)
+        
+        splits = bv.split_host('wibble@a:/floob/')
+        self.assertEqual(splits,{'host': 'a',
+                                 'path': '/floob/', 
+                                 'recursive': True, 
+                                 'user': 'wibble'})
+        
+        splits = bv.split_host('wibble@a:/floob')
+        self.assertEqual(splits,{'host': 'a',
+                                 'path': '/floob', 
+                                 'recursive': False, 
+                                 'user': 'wibble'})
+        
+        splits = bv.split_host('wibble@127.0.0.1:/floob')
+        self.assertEqual(splits,{'host': '127.0.0.1',
+                                 'path': '/floob', 
+                                 'recursive': False, 
+                                 'user': 'wibble'})
+
 
 if __name__ == "__main__":
     unittest.main()

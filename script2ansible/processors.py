@@ -73,13 +73,30 @@ class SlackRoleProcessor(Processor):
         logging.info(f"Processing Slack role: {self.role_name}")
         self.ansible_role_dir = os.path.join(config["output"], "roles", self.role_name)
 
+    @staticmethod
+    def build_ansible_copy(src, dest, **kwargs):
+        logging.debug(f"build_ansible_copy {src}  to {dest}")
+
+        task = {
+            "name": f"Copy {src} to {dest}",
+            "ansible.builtin.copy": {
+                "src": src,
+                "dest": dest,
+                "mode": "preserve",
+            },
+        }
+        if kwargs.get('when'):
+            task['when'] = kwargs.get('when')
+        return task
+
     def get_output_dir(self):
         return self.role_output_dir
 
     def get_role_name(self):
         return self.role_name
-    
-    def move_to_start_using_list_comprehension(self,my_list, element):
+
+    # https://www.tutorialspoint.com/python-ndash-move-given-element-to-list-start
+    def move_to_start_using_list_comprehension(self, my_list, element):
         return [item for item in my_list if item == element] + [item for item in my_list if item != element]
 
     def process_files(self):
@@ -89,16 +106,12 @@ class SlackRoleProcessor(Processor):
         # examples/slack/roles/foo/files/
         #   dirname examples/slack/roles/foo/files
         # examples/slack/roles/foo/files.wibble/
-        subroles = [] 
         files_dir = os.path.join(self.role_dir, "files")
-        subrole_glob = f"{files_dir}.*/"
         logging.debug(f"files_dir {files_dir}")
         logging.debug(f"self.role_dir {self.role_dir}")
-        # https://www.tutorialspoint.com/python-ndash-move-given-element-to-list-start
-        # examples/slack/roles/foo/files/
 
         role_file_dirs = glob.glob(f"{self.role_dir}/files*", recursive=False)
-        role_file_dirs = self.move_to_start_using_list_comprehension(role_file_dirs,'files')     
+        role_file_dirs = self.move_to_start_using_list_comprehension(role_file_dirs, ' files')
         # for role_file_dir in glob.glob(f"{self.role_dir}/files*", recursive=False):
         for role_file_dir in role_file_dirs:
             logging.debug(f"role_file_dir {role_file_dir}")
@@ -114,8 +127,11 @@ class SlackRoleProcessor(Processor):
                 ans_sub_role_files_path = os.path.join(self.ansible_role_dir, "files")
                 when = None
             else:
+                # NOTE: this is the mapping from slack subrole files dir to
+                #       ansible files dir
                 # foo.wibble
-                ans_files_dir_name  = subrole_name.replace('files',self.role_name)
+                ans_files_dir_name = subrole_name.replace('files', self.role_name)
+
                 # /tmp/roles/foo/files/files.wibble
                 ans_sub_role_files_path = os.path.join(self.ansible_role_dir, "files", ans_files_dir_name)
                 when = f"sub_role is '{ans_files_dir_name}'"
@@ -136,14 +152,14 @@ class SlackRoleProcessor(Processor):
                         ans_sub_role_files_path, relative_path
                     )
                     logging.debug(f"    build_dest_path {build_dest_path}")
-                    shutil.copytree(file_name, build_dest_path,dirs_exist_ok=True)
+                    shutil.copytree(file_name, build_dest_path, dirs_exist_ok=True)
                     # foo.wibble/etc
                     task_src_path = os.path.join(ans_files_dir_name, relative_path)
                     logging.debug(f"    task_src_path  {task_src_path}")
                     # /etc
                     task_dest_path = os.path.join("/", relative_path)
                     logging.debug(f"    task_dest_path {task_dest_path}")
-                    copy_task = self.build_ansible_copy(task_src_path, task_dest_path, when = when)
+                    copy_task = self.build_ansible_copy(task_src_path, task_dest_path, when=when)
                     task_container.add_task(
                         copy_task
                     )
@@ -156,9 +172,7 @@ class SlackRoleProcessor(Processor):
         script_dir = os.path.join(self.role_dir, "scripts")
 
         for fname in ("fixfiles", "preinstall", "postinstall"):
-            
             script_name = os.path.join(script_dir, fname)
-
             if os.path.isfile(script_name):
                 task_container = TaskContainer(fname)
                 logging.info(f"{script_name} found, processing...")
@@ -171,21 +185,6 @@ class SlackRoleProcessor(Processor):
             self.config["generator"], self, self.config.get("output_format", "yaml")
         )
         generator.generate()
-
-    def build_ansible_copy(self, src, dest, **kwargs):
-        logging.debug(f"build_ansible_copy {src}  to {dest}")
-
-        task = {
-            "name": f"Copy {src} to {dest}",
-            "ansible.builtin.copy": {
-                "src": src,
-                "dest": dest,
-                "mode": "preserve",
-            },
-        }
-        if kwargs.get('when'):
-            task['when'] = kwargs.get('when')
-        return task
 
 
 class ScriptProcessor(Processor):

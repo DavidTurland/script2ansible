@@ -76,7 +76,7 @@ class GeneratorRole:
                     Dumper=IndenterDumper,
                     default_flow_style=False,
                 )
-        )         
+        )
         ofile_name = os.path.join(
             self.processor.get_output_dir(), "tasks", "main.yml"
         )

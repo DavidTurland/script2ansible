@@ -249,7 +249,7 @@ END {
         result = subprocess.run(cmd, capture_output=True, text=True)
         stdout_lines = result.stdout.splitlines()
         if 0 != result.returncode:
-            logging.error(f" failed with {result.returncode} {result.stderr}") 
+            logging.error(f" failed with {result.returncode} {result.stderr}")
             sys.exit(-1)
         return stdout_lines
 
@@ -266,7 +266,7 @@ END {
         for op in ops:
             t = op.get("type")
             d = op
-            pulling = self.pull
+            # pulling = self.pull
             if t == "file_open":
                 mode = "".join(str(m) for m in d.get("mode", []))
                 if any(m in mode for m in ["w", "a", "+"]):

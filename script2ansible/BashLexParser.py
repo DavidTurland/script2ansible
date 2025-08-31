@@ -247,7 +247,7 @@ class IfVisitor(ast.nodevisitor):
         # eg (3 == 3) , ie True
         self.result = None
 
-        # is the if-test testing the return code of the previous 
+        # is the if-test testing the return code of the previous
         # command
         self.test_return_code = None
 
@@ -391,6 +391,11 @@ class ForVisitor(ast.nodevisitor):
 
 
 class BashScriptVisitor(ast.nodevisitor):
+    # scp_options = cv.options
+    split_host_pattern = re.compile(
+        r"^(?:(?P<user>[^@]+)@)?(?P<host>[^:]+):(?P<path>.+)$"
+    )
+
     def __init__(self, tasks, parser):
         self.tasks = tasks
         self.current_umask = "022"
@@ -399,6 +404,17 @@ class BashScriptVisitor(ast.nodevisitor):
         self.register_names = {}
         self.parser = parser
         self.last_register = None  # Track last registered result
+
+    @staticmethod
+    def split_host(target):
+        rm = BashScriptVisitor.split_host_pattern.match(target)
+        if rm:
+            res = rm.groupdict()
+            res['recursive'] = res['path'].endswith('/')
+            return res
+        else:
+            recursive = target.endswith('/')
+            return {"user": None, "host": None, "path": target, "recursive": recursive}
 
     def umask_to_mode(self, is_dir: bool = True):
         """Convert umask (e.g., '0022') to default mode (e.g., '0755')."""
@@ -538,38 +554,26 @@ class BashScriptVisitor(ast.nodevisitor):
                 }
             )
         elif "scp" == cv.cmd:
-            # scp_options = cv.options
-            remote_pattern = re.compile(
-                r"^(?:(?P<user>[^@]+)@)?(?P<host>[^:]+):(?P<path>.+)$"
-            )
-
-            def split_target(target):
-                rm = remote_pattern.match(target)
-                if rm:
-                    return rm.groupdict()
-                else:
-                    return {"user": None, "host": None, "path": target}
-
-            scp_src = split_target(cv.args[0])
+            scp_src = self.split_host(cv.args[0])
             # NOTE scp '-r'      Recursively copy entire directories.  Note that scp follows symbolic links encountered in the tree traversal.
             # NOTE ansible.builtin.copy 'src'
             # If path is a directory, it is copied recursively. In this case,
             # if path ends with /, only inside contents of that directory are copied to
             # destination. Otherwise, if it does not end with /, the directory itself
             # with all contents is copied. This behavior is similar to the rsync command line tool.
-            scp_dest = split_target(cv.args[1])
+            scp_dest = self.split_host(cv.args[1])
 
             # TODO compare and contrast:
             # self.pull &&
             # scp_src['remote_host']
             # scp_dest['remote_host']
-            # and and look at options
+            # and look at options
             validate_request = {"op": "scp"}
             if bool(scp_src.get("host")):
                 validate_request["src_host"] = True
             if bool(scp_dest.get("host")):
                 validate_request["dest_host"] = True
-            # breakpoint()
+
             validate_response = self.parser.validate_command(validate_request)
             if "accept" == validate_response["status"]:
                 self.tasks.append(

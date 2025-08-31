@@ -30,7 +30,12 @@ pip install -e .
 ```python
 python -m unittest discover -s tests
 ```
-
+## Coverage
+```bash
+pip install coverage
+coverage run -m unittest discover -s tests
+coverage report -m
+```
 
 # Bugs/ Feature requests / Pull Requests
 

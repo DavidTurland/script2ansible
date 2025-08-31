@@ -12,7 +12,8 @@ to Ansible tasks, which in turn are used to generate
 
 Also knows how to translate slack (https://github.com/jeviolle/slack) roles into new Ansible roles
 - 'scripts' can be either bash or perl
-- 'files' and their required movement are correctly translated to role files, with the corresponding task to copy
+- 'files' and their required movement are correctly translated to role 'files', with a corresponding task file to copy them
+
 # This is a Work-in-progress 
 Because many reasons, including:
 ## Operation locality: push vs pull 

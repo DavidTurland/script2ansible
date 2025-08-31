@@ -11,7 +11,7 @@ class Parser:
         self.push = config.get("push", False)
 
     def parse(self):
-        raise NotImplementedError(
+        raise NotImplementedError(  # pragma: no cover
             "Subclasses should implement this method to parse the script."
         )
 

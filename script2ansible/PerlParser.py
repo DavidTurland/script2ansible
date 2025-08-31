@@ -180,8 +180,6 @@ END {
         output_lines = self.run_instrumented(sys.argv[2:])
 
         logging.info("Perl script output:")
-        for line in output_lines:
-            logging.debug(line)
 
         ops = self.load_ops_log()
         self.tasks = self.ops_to_ansible_tasks(ops)
@@ -250,7 +248,7 @@ END {
         stdout_lines = result.stdout.splitlines()
         if 0 != result.returncode:
             logging.error(f" failed with {result.returncode} {result.stderr}")
-            sys.exit(-1)
+            raise RuntimeError(f" failed with {result.returncode} {result.stderr}")
         return stdout_lines
 
     # ---------- Step 3: Load JSON log ----------
@@ -325,9 +323,11 @@ END {
                 )
 
             elif t in ("system_call", "exec_call"):
-                args = d.get("args", [])
-                if not args:
+                args_raw = d.get("args")
+                if not args_raw:
                     continue
+                args = args_raw[0].split()
+                # breakpoint()
                 cmd = args[0]
                 cmd_str = " ".join(str(a) for a in args)
 
@@ -438,8 +438,8 @@ END {
 
 
 # ---------- Main ----------
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+if __name__ == "__main__": # pragma: no cover
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s") 
     if len(sys.argv) < 2:
         logging.error("Usage: process_perl.py <perl_script> [args...]")
         sys.exit(1)

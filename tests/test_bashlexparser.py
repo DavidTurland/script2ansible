@@ -8,6 +8,7 @@ class TestBashLexParser(unittest.TestCase):
         self.test_script_content = (
             'MYVAR=wibble\n'
             'umask 0077\n'
+            'mv foo.txt bar.txt\n'
             'mkdir -p $MYVAR\n'
             'touch /tmp/foo.txt\n'
             'ln -s /tmp/foo.txt /tmp/bar.txt\n'
@@ -15,18 +16,27 @@ class TestBashLexParser(unittest.TestCase):
             'ldconfig\n'
             'gunzip /tmp/archive.gz\n'
             'chmod 755 /tmp/foo.txt\n'
+            'chmod -R 755 /tmp/*\n'
+            'chown foo:bar /tmp/foo.txt\n'
+            'chown -R foo:bar /tmp/*\n'
             'apt update\n'
+            'apt upgrade\n'
             'apt install -y foo bar\n'
             'yum install -y baz\n'
             'echo "hello" > /tmp/hello.txt\n'
+            'echo "hello"\n'
             'echo "append" >> /tmp/hello.txt\n'
             'if [ $? -eq 0 ]; then\n'
+            '  touch /tmp/ok.txt\n'
+            'fi\n'
+            'if [ 0 -eq $? ]; then\n'
             '  touch /tmp/ok.txt\n'
             'fi\n'
             'if [ "$MYVAR" -eq "wibble" ]; then\n'
             '  echo "matched" >> /tmp/ok.txt\n'
             'fi\n'
             'scp /path/to/local/file.txt username@remote_host:/path/to/remote/directory/\n'
+            'ssh foo@bar ls -l\n'
         )
         with open(self.test_script_path, "w") as f:
             f.write(self.test_script_content)
@@ -58,6 +68,24 @@ class TestBashLexParser(unittest.TestCase):
         # Check echo with redirect
         self.assertTrue(any("ansible.builtin.copy" in t or "ansible.builtin.lineinfile" in t for t in tasks))
 
+    def test_echo_redirect(self):
+        config = {}
+        parser = BashLexParser(script_string="""
+echo "hello" > /tmp/hello.txt
+echo "append" >> /tmp/hello.txt
+cat < output.txt
+wc -l < users       
+        """, config=config)   
+        tasks = parser.parse()
+        # ignore cat and wc
+        self.assertEqual(len(tasks),2)
+        # breakpoint()
+        # Find the echo task with a 'when' condition for variable comparison
+        #echo_tasks = [t for t in tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
+        #self.assertTrue(any("when" in t for t in echo_tasks))
+        # The 'when' should reference MYVAR == 'wibble'
+        #self.assertTrue(any("MYVAR" in str(t.get("when", "")) and "wibble" in str(t.get("when", "")) for t in echo_tasks))
+    
     def test_if_result_code(self):
         parser = BashLexParser(file_path=self.test_script_path, config= {})
         tasks = parser.parse()
@@ -95,8 +123,41 @@ fi
         echo_tasks = [t for t in tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
         self.assertTrue(any("when" in t for t in echo_tasks))
         # The 'when' should reference MYVAR == 'wibble'
+        self.assertTrue(any("MYVAR" in str(t.get("when", "")) and "wibble" in str(t.get("when", "")) for t in echo_tasks)) 
+
+    def test_if_ne_inline(self):
+        config = {}
+        parser = BashLexParser(script_string="""
+MYVAR=wibble
+if [ "$MYVAR" -ne "wibble" ]; then
+  touch /tmp/ok.txt
+fi
+if [ "$MYVAR" -lt "wibble" ]; then
+  touch /tmp/ok.txt
+fi
+if [ "$MYVAR" -le "wibble" ]; then
+  touch /tmp/ok.txt
+fi
+if [ "$MYVAR" -gt "wibble" ]; then
+  touch /tmp/ok.txt
+fi
+if [ "$MYVAR" -ge "wibble" ]; then
+  touch /tmp/ok.txt
+fi                          
+        """, config=config)   
+        tasks = parser.parse()
+        self.assertEqual(len(tasks),5)
+        self.assertEqual(tasks[0]['when'] ,'$MYVAR != wibble',"dest dir")
+        self.assertEqual(tasks[1]['when'] ,'$MYVAR < wibble',"dest dir")
+        self.assertEqual(tasks[2]['when'] ,'$MYVAR <= wibble',"dest dir")
+        self.assertEqual(tasks[3]['when'] ,'$MYVAR > wibble',"dest dir")
+        self.assertEqual(tasks[4]['when'] ,'$MYVAR >= wibble',"dest dir")
+        # Find the echo task with a 'when' condition for variable comparison
+        echo_tasks = [t for t in tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
+        self.assertTrue(any("when" in t for t in echo_tasks))
+        # The 'when' should reference MYVAR == 'wibble'
         self.assertTrue(any("MYVAR" in str(t.get("when", "")) and "wibble" in str(t.get("when", "")) for t in echo_tasks))
-    
+
     def test_for_loop_simple(self):
         config = {}
         parser = BashLexParser(script_string="""
@@ -123,7 +184,6 @@ scp -r ./myfolder user@host:/remote/path/
 scp -r ./myfolder user@host:/remote/path/
 scp -P 2222 file.txt user@10.0.0.1:/home/user/
 scp -i ~/.ssh/id_rsa -P 2200 -r ./dir host:/var/tmp/
-
             """, config=config)   
         tasks = parser.parse()
         self.assertTrue(len(tasks),5)
@@ -168,7 +228,6 @@ scp -i ~/.ssh/id_rsa -P 2200 -r ./dir                    host:/var/tmp2/
         self.assertEqual(tasks[0]['ansible.builtin.copy']['dest'] ,'/var/tmp/',"dest dir")
         self.assertEqual(tasks[1]['ansible.builtin.copy']['dest'] ,'/path/to/remote/directory/',"dest dir")
 
-
     def test_split_host(self):
         bv = BashScriptVisitor(tasks=None,parser=None)
         
@@ -189,7 +248,7 @@ scp -i ~/.ssh/id_rsa -P 2200 -r ./dir                    host:/var/tmp2/
                                  'path': '/floob', 
                                  'recursive': False, 
                                  'user': 'wibble'})
-
+        # bv.umask_to_mode()
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main()  # pragma: no cover

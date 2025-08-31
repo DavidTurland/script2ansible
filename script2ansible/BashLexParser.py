@@ -3,18 +3,18 @@ from bashlex import parser, ast
 import re
 
 
-class ScopedVariables:
-    def __init__(self, parent, context):
-        self.parent = parent
-        self.context = context
-        if self.context:
-            for k, v in context.items():
-                parent.push_variable(k, v)
+# class ScopedVariables:
+#     def __init__(self, parent, context):
+#         self.parent = parent
+#         self.context = context
+#         if self.context:
+#             for k, v in context.items():
+#                 parent.push_variable(k, v)
 
-    def __del__(self):
-        if self.context:
-            for k in self.context.keys():
-                self.parent.pop_variable(k)
+#     def __del__(self):
+#         if self.context:
+#             for k in self.context.keys():
+#                 self.parent.pop_variable(k)
 
 
 class CommandVisitor(ast.nodevisitor):
@@ -28,12 +28,16 @@ class CommandVisitor(ast.nodevisitor):
         self.redir_type = None
         self.redir_file = None
         self.is_command = True
+        self.params=[]
 
     def visitword(self, n, word):
         if self.cmd is None:
             self.cmd = word
         else:
             self.parsed_args.append(word)
+        self.params=[]
+        for child in n.parts:
+            self.visit(child)
         return False
 
     def visitcommand(self, n, parts):
@@ -54,8 +58,9 @@ class CommandVisitor(ast.nodevisitor):
             self.redir_type = type
             self.redir_file = output.word
         elif type in ("<",):
+            #breakpoint()
             self.redir_type = type
-            self.redir_file = input.word
+            self.redir_file = output.word
 
     def visitassignment(self, n, word):
         """.CommandNode(pos=(0, 12), parts=[
@@ -75,7 +80,8 @@ class CommandVisitor(ast.nodevisitor):
             ParameterNode(pos=(67, 71), value='s'),
         ]),
         """
-        pass
+        # breakpoint()
+        self.params.append(value)
 
     def process_args(self, spec):
 
@@ -109,6 +115,12 @@ class CommandVisitor(ast.nodevisitor):
             "cp": {
                 "ov": set(),
                 "o": {
+                    "-f","-n",
+                },
+            },
+            "mv": {
+                "ov": set(),
+                "o": {
                     "-r",
                 },
             },
@@ -117,6 +129,10 @@ class CommandVisitor(ast.nodevisitor):
                 "o": {
                     "-s",
                 },
+            },
+            "ssh": {
+                "ov": set(),
+                "o": set(),
             },
             "scp": {
                 "ov": {
@@ -190,7 +206,7 @@ class CommandVisitor(ast.nodevisitor):
         }
         if self.is_command:
             if self.cmd not in specs:
-                breakpoint()
+                # breakpoint()
                 print(f" failed to find {self.cmd}")
             else:
                 spec = specs[self.cmd]
@@ -313,8 +329,6 @@ class IfVisitor(ast.nodevisitor):
             elif self.test_state == "rhs":
                 # maybe +=
                 self.arg_rhs = word
-        else:
-            return
 
     def visitcommand(self, n, parts):
         if self.state == "then":
@@ -376,9 +390,8 @@ class ForVisitor(ast.nodevisitor):
     def visitcommand(self, n, parts):
         if self.state == "do":
             self.commands.append(n)
-
         else:
-            breakpoint()
+            breakpoint()  # pragma: no cover
         return False
 
     def visitword(self, n, word):
@@ -386,7 +399,8 @@ class ForVisitor(ast.nodevisitor):
             self.for_var = word
         elif self.state == "in":
             self.loop_vars.append(word)
-        elif self.state == "done":
+        else: # pragma: no cover
+            breakpoint()  
             pass
 
 
@@ -433,8 +447,8 @@ class BashScriptVisitor(ast.nodevisitor):
         self.last_register = self.parser.get_register_name(name)
         return self.last_register
 
-    def get_variables(self):
-        return self.variables
+    # def get_variables(self):
+    #     return self.variables
 
     def get_variable(self, var, default=None):
         if var in self.stack_variables:
@@ -445,18 +459,18 @@ class BashScriptVisitor(ast.nodevisitor):
         value = self.interpret_variable(value)
         self.variables[var] = value
 
-    def push_variable(self, var: str, value: str):
-        """
-        sets a scoped variable
-        """
-        self.stack_variables[var] = value
+    # def push_variable(self, var: str, value: str):
+    #     """
+    #     sets a scoped variable
+    #     """
+    #     self.stack_variables[var] = value
 
-    def pop_variable(self, var: str):
-        """
-        deletes a scoped variable
-        """
-        if var in self.stack_variables:
-            del self.stack_variables[var]
+    # def pop_variable(self, var: str):
+    #     """
+    #     deletes a scoped variable
+    #     """
+    #     if var in self.stack_variables:
+    #         del self.stack_variables[var]
 
     def interpret_variable(self, stringy: str, type: str = "interpret") -> str:
         def replace_var(match):
@@ -466,7 +480,6 @@ class BashScriptVisitor(ast.nodevisitor):
         def jinja_var(match):
             var = match.group("var")
             return f"{{{{ {var} }}}}"
-
         if type == "interpret":
             replacer = replace_var
         elif type == "jinja":
@@ -478,11 +491,11 @@ class BashScriptVisitor(ast.nodevisitor):
         # Replace $VAR style (only if followed by non-word char or end-of-line)
         return re.sub(r"\$(?P<var>\w+)\b", replacer, stringy)
 
-    def visitassignment(self, n, parts):
-        if "=" in n.word:
-            var, val = n.word.split("=", 1)
-            self.set_variable(var, val)
-        return False
+    # def visitassignment(self, n, parts):
+    #     if "=" in n.word:
+    #         var, val = n.word.split("=", 1)
+    #         self.set_variable(var, val)
+    #     return False
 
     def visitcommand(self, n, parts, context=None):
         # scoped_vars = ScopedVariables(self, context)  # noqa: F841
@@ -590,6 +603,7 @@ class BashScriptVisitor(ast.nodevisitor):
             else:
                 print(f"scp skipping command {cv.cmd}")
         elif "mv" == cv.cmd:
+            # breakpoint()
             src = self.interpret_variable(cv.args[0])
             dest = self.interpret_variable(cv.args[1])
             command_str = f"mv {src} {dest}"
@@ -762,6 +776,7 @@ class BashScriptVisitor(ast.nodevisitor):
             else:
                 when_cond = f"{self.last_register} is failed"
         else:
+            # jinja2 surely?
             when_cond = result_str
 
         body_nodes = iv.get_commands()

@@ -53,4 +53,4 @@ class TestBashParser(unittest.TestCase):
         self.assertTrue(any("is succeeded" in t.get("when", "") or "is failed" in t.get("when", "") for t in touch_tasks))
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main()  # pragma: no cover

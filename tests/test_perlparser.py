@@ -1,4 +1,7 @@
 import unittest
+import os
+import sys
+import subprocess
 from script2ansible.PerlParser import PerlParser
 from subprocess import CalledProcessError
 class TestPerlParser(unittest.TestCase):
@@ -109,10 +112,9 @@ rmdir '/tmp/fooby/doo';
             """, config={})       
         self.assertEqual(parser.instrumentation_packages,{'Org::Turland::Custom'})
         tasks = parser.parse()
-        #breakpoint()
         self.assertEqual(len(tasks),2, "just the two tasks")
-        #self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
-        #self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
+        # self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
+        # self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
 
     def test_parser_system_various(self):
         parser = PerlParser(script_string="""
@@ -121,11 +123,52 @@ rmdir '/tmp/fooby/doo';
             system('uptime');
             """, config={})       
         tasks = parser.parse()
-        #breakpoint()
         self.assertEqual(len(tasks),2, "just the two tasks")
-        #self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
-        #self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
+        # self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
+        # self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
 
+    def test_parser_env_variables_simple(self):
+        script_string_file = '/tmp/script_string_file.pl'
+        script_string="""
+        use Env qw( $ROOT $VERBOSE HOSTNAME);
+        system("echo ${ROOT} ${VERBOSE} $HOSTNAME $ENV{STAGE} ");
+        # system('uptime');
+            """  
+        with open(script_string_file, "w") as f:
+            f.write(script_string)
+
+        cmd = ["perl", script_string_file]
+
+        env  = os.environ | {"ROOT": "bar",
+                             "STAGE" : "blah",
+                             "HOSTNAME" : "foo",
+                             "VERBOSE" : "1",
+                          }
+        result = subprocess.run(cmd, capture_output=True, text=True, env = env)
+        self.assertEqual("bar 1 foo blah\n",result.stdout)
+        os.remove(script_string_file)
+
+    def test_parser_env_variables(self):
+        parser = PerlParser(script_string="""
+        use Env qw( $ROOT $VERBOSE STAGE);
+        system("mv ${ROOT}foo_${VERBOSE} $STAGE/bar ");
+        system('uptime');
+            """, config={})       
+        tasks = parser.parse()
+        self.assertEqual(len(tasks),2, "just the two tasks")
+        self.assertEqual(tasks[0]["ansible.builtin.command"], 'mv /foo_1 /tmp/s2a_stage/bar')
+        self.assertEqual(tasks[1]["ansible.builtin.command"], "uptime")
+
+    def test_parser_env_variables_two(self):
+        parser = PerlParser(script_string="""
+        system("mv $ENV{ROOT}/foo.pl $STAGE/wibble_$ENV{VERBOSE}");
+        system('uptime');
+        """, config={})       
+        tasks = parser.parse()
+        # breakpoint()
+        self.assertEqual(len(tasks),2, "just the two tasks")
+        # self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
+        # self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
 
     def test_parser_custom(self):
         parser = PerlParser(script_string="""

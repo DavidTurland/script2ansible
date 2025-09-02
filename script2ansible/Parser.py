@@ -9,6 +9,10 @@ class Parser:
         self.register_names = {}
         self.pull = config.get("pull", False)
         self.push = config.get("push", False)
+        self.root = config.get("root", '/')
+        self.stage = config.get("stage", '/tmp/s2a_stage')
+        self.hostname = config.get("hostname", 'localhost')
+        self.verbose = config.get("verbose", "1")
 
     def parse(self):
         raise NotImplementedError(  # pragma: no cover
@@ -24,6 +28,13 @@ class Parser:
         else:
             self.register_names[name] += 1
         return f"{name}_{self.register_names[name]}"
+
+    def get_env(self):
+        return {"ROOT": self.root,
+                "STAGE" : self.stage,
+                "HOSTNAME" : self.hostname,
+                "VERBOSE" : self.verbose,
+                }
 
     def validate_command(self, command={}):
         """

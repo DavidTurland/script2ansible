@@ -5,39 +5,39 @@ from script2ansible.BashLexParser import BashLexParser, BashScriptVisitor
 class TestBashLexParser(unittest.TestCase):
     def setUp(self):
         self.test_script_path = "/tmp/test_bashlex_script.sh"
-        self.test_script_content = (
-            'MYVAR=wibble\n'
-            'umask 0077\n'
-            'mv foo.txt bar.txt\n'
-            'mkdir -p $MYVAR\n'
-            'touch /tmp/foo.txt\n'
-            'ln -s /tmp/foo.txt /tmp/bar.txt\n'
-            'cp /tmp/foo.txt /tmp/bar.txt\n'
-            'ldconfig\n'
-            'gunzip /tmp/archive.gz\n'
-            'chmod 755 /tmp/foo.txt\n'
-            'chmod -R 755 /tmp/*\n'
-            'chown foo:bar /tmp/foo.txt\n'
-            'chown -R foo:bar /tmp/*\n'
-            'apt update\n'
-            'apt upgrade\n'
-            'apt install -y foo bar\n'
-            'yum install -y baz\n'
-            'echo "hello" > /tmp/hello.txt\n'
-            'echo "hello"\n'
-            'echo "append" >> /tmp/hello.txt\n'
-            'if [ $? -eq 0 ]; then\n'
-            '  touch /tmp/ok.txt\n'
-            'fi\n'
-            'if [ 0 -eq $? ]; then\n'
-            '  touch /tmp/ok.txt\n'
-            'fi\n'
-            'if [ "$MYVAR" -eq "wibble" ]; then\n'
-            '  echo "matched" >> /tmp/ok.txt\n'
-            'fi\n'
-            'scp /path/to/local/file.txt username@remote_host:/path/to/remote/directory/\n'
-            'ssh foo@bar ls -l\n'
-        )
+        self.test_script_content = """
+MYVAR=wibble
+umask 0077
+mv foo.txt bar.txt
+mkdir -p $MYVAR
+touch /tmp/foo.txt
+ln -s /tmp/foo.txt /tmp/bar.txt
+cp /tmp/foo.txt /tmp/bar.txt
+ldconfig
+gunzip /tmp/archive.gz
+chmod 755 /tmp/foo.txt
+chmod -R 755 /tmp/*
+chown foo:bar /tmp/foo.txt
+chown -R foo:bar /tmp/*
+apt update
+apt upgrade
+apt install -y foo bar
+yum install -y baz
+echo "hello" > /tmp/hello.txt
+echo "hello"
+echo "append" >> /tmp/hello.txt
+if [ $? -eq 0 ]; then
+  touch /tmp/ok.txt
+fi
+if [ 0 -eq $? ]; then
+  touch /tmp/ok.txt
+fi
+if [ "$MYVAR" -eq "wibble" ]; then
+  echo "matched" >> /tmp/ok.txt
+fi
+scp /path/to/local/file.txt username@remote_host:/path/to/remote/directory/
+ssh foo@bar ls -l
+       """
         with open(self.test_script_path, "w") as f:
             f.write(self.test_script_content)
 
@@ -79,13 +79,7 @@ wc -l < users
         tasks = parser.parse()
         # ignore cat and wc
         self.assertEqual(len(tasks),2)
-        # breakpoint()
-        # Find the echo task with a 'when' condition for variable comparison
-        #echo_tasks = [t for t in tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
-        #self.assertTrue(any("when" in t for t in echo_tasks))
-        # The 'when' should reference MYVAR == 'wibble'
-        #self.assertTrue(any("MYVAR" in str(t.get("when", "")) and "wibble" in str(t.get("when", "")) for t in echo_tasks))
-    
+
     def test_if_result_code(self):
         parser = BashLexParser(file_path=self.test_script_path, config= {})
         tasks = parser.parse()
@@ -174,6 +168,7 @@ done
         #self.assertTrue(any("when" in t for t in echo_tasks))
         # The 'when' should reference MYVAR == 'wibble'
         #self.assertTrue(any("MYVAR" in str(t.get("when", "")) and "wibble" in str(t.get("when", "")) for t in echo_tasks))
+
     def test_scp_simple_push_and_pull(self):
         config = {"pull" : True,
                   "push" : True,}
@@ -249,6 +244,31 @@ scp -i ~/.ssh/id_rsa -P 2200 -r ./dir                    host:/var/tmp2/
                                  'recursive': False, 
                                  'user': 'wibble'})
         # bv.umask_to_mode()
+
+    def test_umask(self):
+        config = {}
+        parser = BashLexParser(script_string="""
+umask 0077
+touch /tmp/foo.txt
+umask 0022
+touch /tmp/bar.txt
+MY_UMASK=0027
+umask $MY_UMASK
+touch /tmp/bar_foo.txt
+        """, config=config)   
+        tasks = parser.parse()
+        # breakpoint()
+        self.assertEqual(len(tasks),3)
+        self.assertEqual(tasks[0]['ansible.builtin.file']['mode'] ,'0600',"dest dir")
+        self.assertEqual(tasks[1]['ansible.builtin.file']['mode'] ,'0644',"dest dir")
+        # BUG:
+        # self.current_umask is set to $MY_UMASK
+        # umask_to_mode fails to int('$MY_UMASK', 8)
+        # maybe, file:
+        # " {{ 666 - MY_UMASK }}"
+        # maybe, dir:
+        # " {{ 777 - MY_UMASK }}"        
+        self.assertEqual(tasks[2]['ansible.builtin.file']['mode'] ,'0640',"dest dir")
 
 if __name__ == "__main__":
     unittest.main()  # pragma: no cover

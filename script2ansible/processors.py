@@ -152,7 +152,7 @@ class SlackRoleProcessor(Processor):
                         ans_sub_role_files_path, relative_path
                     )
                     logging.debug(f"    build_dest_path {build_dest_path}")
-                    shutil.copytree(file_name, build_dest_path, dirs_exist_ok=True)
+                    shutil.copytree(file_name, build_dest_path, dirs_exist_ok=True, ignore_dangling_symlinks=True)
                     # foo.wibble/etc
                     task_src_path = os.path.join(ans_files_dir_name, relative_path)
                     logging.debug(f"    task_src_path  {task_src_path}")
@@ -194,7 +194,7 @@ class ScriptProcessor(Processor):
         import logging
 
         if not os.path.exists(self.file_name):
-            logging.error(f"Bash File not found: {self.file_name}")
+            logging.error(f"Script File not found: {self.file_name}")
             sys.exit(1)
         self.output_file = self.config["output"]
 

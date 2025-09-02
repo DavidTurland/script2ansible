@@ -9,3 +9,5 @@ ansible_tasks.json
 ansible_tasks.yml
 # local config
 .script2ansible.yaml
+# test artifacts
+.coverage

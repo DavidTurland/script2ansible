@@ -15,6 +15,7 @@ class PerlParser(Parser):
     INSTRUMENTATION_CODE_PREFIX = r"""
 use strict;
 use warnings;
+use Env;
 use JSON;
 use IO::File;
 
@@ -62,7 +63,8 @@ BEGIN {
     *CORE::GLOBAL::system = sub {
         my @args = @_;
         log_op("system_call", args => \@args);
-        return CORE::system(@args);
+        # TODO: defang all destructive calls
+        # return CORE::system(@args);
     };
     *CORE::GLOBAL::exec = sub {
         my @args = @_;
@@ -244,7 +246,8 @@ END {
     # ---------- Step 2: Run instrumented.pl and capture output ----------
     def run_instrumented(self, args):
         cmd = ["perl", self.instrumented_path] + args
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        env=os.environ | self.get_env()
+        result = subprocess.run(cmd, capture_output=True, text=True, env = env)
         stdout_lines = result.stdout.splitlines()
         if 0 != result.returncode:
             logging.error(f" failed with {result.returncode} {result.stderr}")
@@ -354,7 +357,7 @@ END {
                 elif cmd == "mv" and len(args) > 2:
                     tasks.append(
                         {
-                            "name": f"Rename arse {args[1]} to {args[2]}",
+                            "name": f"Rename {args[1]} to {args[2]}",
                             "ansible.builtin.command": f"mv {args[1]} {args[2]}",
                             "args": {
                                 "creates": args[2],

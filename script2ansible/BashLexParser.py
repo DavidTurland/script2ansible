@@ -38,6 +38,9 @@ class CommandVisitor(ast.nodevisitor):
         self.params=[]
         for child in n.parts:
             self.visit(child)
+        if len(self.params) > 0:
+            # there were variables in the word
+            pass
         return False
 
     def visitcommand(self, n, parts):
@@ -76,6 +79,7 @@ class CommandVisitor(ast.nodevisitor):
 
     def visitparameter(self, n, value):
         """
+        TODO: trigger the word as containing a parameter (variable)
         WordNode(pos=(58, 71), word='/tmp/bar_${s}', parts=[
             ParameterNode(pos=(67, 71), value='s'),
         ]),
@@ -431,7 +435,14 @@ class BashScriptVisitor(ast.nodevisitor):
             return {"user": None, "host": None, "path": target, "recursive": recursive}
 
     def umask_to_mode(self, is_dir: bool = True):
-        """Convert umask (e.g., '0022') to default mode (e.g., '0755')."""
+        """
+        TODO: add support fro variables
+        To calculate the permissions that will result from specific umask values, 
+        subtract the umask from 666 for files, 
+        and from 777 for directories 
+        For example, a umask of 022 results in permissions of 644. 
+        
+        Convert umask (e.g., '0022') to default mode (e.g., '0755')."""
         try:
             mask = int(self.current_umask, 8)
             default = 0o777 if is_dir else 0o666
@@ -491,11 +502,12 @@ class BashScriptVisitor(ast.nodevisitor):
         # Replace $VAR style (only if followed by non-word char or end-of-line)
         return re.sub(r"\$(?P<var>\w+)\b", replacer, stringy)
 
-    # def visitassignment(self, n, parts):
-    #     if "=" in n.word:
-    #         var, val = n.word.split("=", 1)
-    #         self.set_variable(var, val)
-    #     return False
+    def visitassignment(self, n, parts):
+        breakpoint()
+        if "=" in n.word:
+            var, val = n.word.split("=", 1)
+            self.set_variable(var, val)
+        return False
 
     def visitcommand(self, n, parts, context=None):
         # scoped_vars = ScopedVariables(self, context)  # noqa: F841
@@ -806,12 +818,14 @@ class BashLexParser(Parser):
         https://github.com/idank/bashlex/blob/master/examples/commandsubstitution-remover.py
         """
         tasks = []
-        source = None
+        source = ''
+        for k,v in self.get_env().items():
+            source += f'{k}="{v}"\n'
         if self.file_path:
             with open(self.file_path, "r") as file:
-                source = file.read()
+                source += file.read()
         else:
-            source = self.script_string
+            source += self.script_string
         trees = parser.parse(source)
 
         visitor = BashScriptVisitor(tasks, self)

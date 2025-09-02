@@ -5,14 +5,14 @@ General/common
 
 Bash
 - [ ] Variables: define and/or interpret/template
-- [ ] Environment Variables 
+- [x] Environment Variables 
 - [x] Parse for loops
 - [ ] Parse while loops
 - [ ] support for new pragmas to guide translation (unlikely)
 
 Perl
 - [ ] Variables: define and/or interpret/template
-- [ ] Environment Variables
+- [x] Environment Variables
 - [ ] what to do with Perl open,print,close 
 - [ ] support for new pragmas to guide translation (unlikely)
 

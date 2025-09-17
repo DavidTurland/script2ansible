@@ -125,6 +125,32 @@ yum upgrade
 yum install
 echo ( with redirection: '>', and '>>' )
 ```
+### Bash Variables
+This may be feature creep but:  
+Exported variables are registered as ansible role variables.  
+They may be interpreted as embedded jinja templates, not sure yet  
+non-exported variables are interpreted
+
+eg
+```bash
+export FOO=wibble
+BAR=wobble
+
+touch /tmp/$FOO
+touch /tmp/${FOO}_${BAR}
+```
+yields:
+```yaml
+- name: file_state
+  ansible.builtin.file:
+     path: "/tmp/{{ FOO }}"
+
+- name: file_state_2
+  ansible.builtin.file:
+     path: "/tmp/{{ FOO }}_wibble"
+```
+
+
 
 ## Perl
 The script is run, and intrinsics, and selected package methods are intercepted, or mocked

@@ -491,7 +491,7 @@ class BashScriptVisitor(ast.nodevisitor):
             self.static_variables[var] = value
             # hmm
             self.variables[var] = value
-            breakpoint()
+            # breakpoint()
             self.container.add_variable(var, value)
             pass
         else:

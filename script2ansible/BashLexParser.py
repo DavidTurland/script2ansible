@@ -1,7 +1,9 @@
-from .Parser import Parser
+
 from bashlex import parser, ast
 import re
 
+from .Parser import Parser
+from .utility import TaskContainer
 
 # class ScopedVariables:
 #     def __init__(self, parent, context):
@@ -28,14 +30,14 @@ class CommandVisitor(ast.nodevisitor):
         self.redir_type = None
         self.redir_file = None
         self.is_command = True
-        self.params=[]
+        self.params = []
 
     def visitword(self, n, word):
         if self.cmd is None:
             self.cmd = word
         else:
             self.parsed_args.append(word)
-        self.params=[]
+        self.params = []
         for child in n.parts:
             self.visit(child)
         if len(self.params) > 0:
@@ -57,11 +59,9 @@ class CommandVisitor(ast.nodevisitor):
             WordNode(pos=(275, 289), word='/tmp/hello.txt'), pos=(272, 289), type='>>'),
         ])"""
         if type in (">", ">>"):
-            # breakpoint()  # Debugging point
             self.redir_type = type
             self.redir_file = output.word
         elif type in ("<",):
-            #breakpoint()
             self.redir_type = type
             self.redir_file = output.word
 
@@ -74,7 +74,7 @@ class CommandVisitor(ast.nodevisitor):
             self.parent.set_variable(var, val)
 
             self.is_command = False
-        # self.tasks.append({"_set_var": (var, val)})
+        # self.container.add_task({"_set_var": (var, val)})
         return False
 
     def visitparameter(self, n, value):
@@ -119,7 +119,7 @@ class CommandVisitor(ast.nodevisitor):
             "cp": {
                 "ov": set(),
                 "o": {
-                    "-f","-n",
+                    "-f", "-n",
                 },
             },
             "mv": {
@@ -165,6 +165,10 @@ class CommandVisitor(ast.nodevisitor):
                 },
             },
             "umask": {
+                "ov": set(),
+                "o": set(),
+            },
+            "export": {
                 "ov": set(),
                 "o": set(),
             },
@@ -403,8 +407,8 @@ class ForVisitor(ast.nodevisitor):
             self.for_var = word
         elif self.state == "in":
             self.loop_vars.append(word)
-        else: # pragma: no cover
-            breakpoint()  
+        else:  # pragma: no cover
+            breakpoint()
             pass
 
 
@@ -415,13 +419,15 @@ class BashScriptVisitor(ast.nodevisitor):
     )
 
     def __init__(self, tasks, parser):
-        self.tasks = tasks
+        # self.tasks = tasks
         self.current_umask = "022"
         self.variables = {}
+        self.static_variables = {}
         self.stack_variables = {}
         self.register_names = {}
         self.parser = parser
         self.last_register = None  # Track last registered result
+        self.container = TaskContainer('hmm')
 
     @staticmethod
     def split_host(target):
@@ -436,12 +442,26 @@ class BashScriptVisitor(ast.nodevisitor):
 
     def umask_to_mode(self, is_dir: bool = True):
         """
+
+        # Get the current umask
+        current_umask=$(umask)
+
+        # Calculate file permissions (example with 666 default)
+        file_permissions=$(( 0666 & (~current_umask) ))
+        printf "Umask: %03o\n" "$current_umask"
+        printf "File Permissions (from 666): %03o\n" "$file_permissions"
+
+        # Calculate directory permissions (example with 777 default)
+        directory_permissions=$(( 0777 & (~current_umask) ))
+        printf "Directory Permissions (from 777): %03o\n" "$directory_permissions"
+
+
         TODO: add support fro variables
-        To calculate the permissions that will result from specific umask values, 
-        subtract the umask from 666 for files, 
-        and from 777 for directories 
-        For example, a umask of 022 results in permissions of 644. 
-        
+        To calculate the permissions that will result from specific umask values,
+        subtract the umask from 666 for files,
+        and from 777 for directories
+        For example, a umask of 022 results in permissions of 644.
+
         Convert umask (e.g., '0022') to default mode (e.g., '0755')."""
         try:
             mask = int(self.current_umask, 8)
@@ -458,17 +478,25 @@ class BashScriptVisitor(ast.nodevisitor):
         self.last_register = self.parser.get_register_name(name)
         return self.last_register
 
-    # def get_variables(self):
-    #     return self.variables
-
     def get_variable(self, var, default=None):
         if var in self.stack_variables:
             return self.stack_variables[var]
+        if var in self.static_variables:
+            return self.static_variables[var]
         return self.variables.get(var, default)
 
-    def set_variable(self, var: str, value: str):
-        value = self.interpret_variable(value)
-        self.variables[var] = value
+    def set_variable(self, var: str, value: str, **kwargs):
+        if 'export' in kwargs:
+            value = self.interpret_variable(value, type='jinja')
+            self.static_variables[var] = value
+            # hmm
+            self.variables[var] = value
+            breakpoint()
+            self.container.add_variable(var, value)
+            pass
+        else:
+            value = self.interpret_variable(value)
+            self.variables[var] = value
 
     # def push_variable(self, var: str, value: str):
     #     """
@@ -486,11 +514,16 @@ class BashScriptVisitor(ast.nodevisitor):
     def interpret_variable(self, stringy: str, type: str = "interpret") -> str:
         def replace_var(match):
             var = match.group("var")
-            return self.get_variable(var, match.group(0))
+            raw = match.group(0)
+            return self.get_variable(var, raw)
 
         def jinja_var(match):
             var = match.group("var")
-            return f"{{{{ {var} }}}}"
+            raw = match.group(0)
+            if var in self.static_variables:
+                return f"{{{{ {var} }}}}"
+            else:
+                return self.get_variable(var, raw)
         if type == "interpret":
             replacer = replace_var
         elif type == "jinja":
@@ -514,13 +547,22 @@ class BashScriptVisitor(ast.nodevisitor):
         cv = CommandVisitor(self)
         cv.visit(n)
         if "umask" == cv.cmd:
-            self.current_umask = cv.args[0]
+            self.current_umask = self.interpret_variable(cv.args[0])
             return False
+        elif "export" == cv.cmd:
+            # ['foo=wibble']
+            arg = cv.args[0]
+            if "=" in arg:
+                var, val = arg.split("=", 1)
+                self.set_variable(var, val, export=True)
+            else:
+                breakpoint()
+                pass
         elif "mkdir" == cv.cmd:
             arg_path = cv.args[0]
             mode = self.umask_to_mode(is_dir=True)
             path = self.interpret_variable(arg_path)
-            self.tasks.append(
+            self.container.add_task(
                 {
                     "name": f"Ensure directory {path} exists",
                     "ansible.builtin.file": {
@@ -534,8 +576,8 @@ class BashScriptVisitor(ast.nodevisitor):
         elif "touch" == cv.cmd:
             arg_path = cv.args[0]
             mode = self.umask_to_mode(is_dir=False)
-            path = self.interpret_variable(arg_path)
-            self.tasks.append(
+            path = self.interpret_variable(arg_path, type='jinja')
+            self.container.add_task(
                 {
                     "name": f"Ensure file {path} exists",
                     "ansible.builtin.file": {
@@ -552,7 +594,7 @@ class BashScriptVisitor(ast.nodevisitor):
             dest = self.interpret_variable(cv.args[1])
             # TODO directory?
             mode = self.umask_to_mode(is_dir=False)
-            self.tasks.append(
+            self.container.add_task(
                 {
                     "name": f"Create {'symlink' if is_symlink else 'hard link'} {dest} → {src}",
                     "ansible.builtin.file": {
@@ -567,7 +609,7 @@ class BashScriptVisitor(ast.nodevisitor):
         elif "cp" == cv.cmd:
             src = self.interpret_variable(cv.args[0])
             dest = self.interpret_variable(cv.args[1])
-            self.tasks.append(
+            self.container.add_task(
                 {
                     "name": f"Copy {src} to {dest}",
                     "ansible.builtin.copy": {
@@ -601,7 +643,7 @@ class BashScriptVisitor(ast.nodevisitor):
 
             validate_response = self.parser.validate_command(validate_request)
             if "accept" == validate_response["status"]:
-                self.tasks.append(
+                self.container.add_task(
                     {
                         "name": f"Scp {scp_src['path']} to {scp_dest['path']}",
                         "ansible.builtin.copy": {
@@ -619,7 +661,7 @@ class BashScriptVisitor(ast.nodevisitor):
             src = self.interpret_variable(cv.args[0])
             dest = self.interpret_variable(cv.args[1])
             command_str = f"mv {src} {dest}"
-            self.tasks.append(
+            self.container.add_task(
                 {
                     "name": f"Run shell command: {command_str}",
                     "shell": command_str,
@@ -630,7 +672,7 @@ class BashScriptVisitor(ast.nodevisitor):
             )
         elif "ldconfig" == cv.cmd:
             reg_name = self.get_register_name("ldconfig")
-            self.tasks.append(
+            self.container.add_task(
                 {
                     "name": "Run ldconfig",
                     "ansible.builtin.command": "ldconfig",
@@ -640,7 +682,7 @@ class BashScriptVisitor(ast.nodevisitor):
             )
         elif "gunzip" == cv.cmd:
             path = self.interpret_variable(cv.args[0])
-            self.tasks.append(
+            self.container.add_task(
                 {
                     "name": f"Extract GZ archive {path}",
                     "ansible.builtin.unarchive": {
@@ -665,7 +707,7 @@ class BashScriptVisitor(ast.nodevisitor):
             }
             if recursive:
                 task["ansible.builtin.file"]["recurse"] = True
-            self.tasks.append(task)
+            self.container.add_task(task)
         elif "chmod" == cv.cmd:
             mode = self.interpret_variable(cv.args[0])
             path = self.interpret_variable(cv.args[1])
@@ -682,12 +724,12 @@ class BashScriptVisitor(ast.nodevisitor):
             }
             if recursive:
                 task["ansible.builtin.file"]["recurse"] = True
-            self.tasks.append(task)
+            self.container.add_task(task)
         elif cv.cmd in ("apt", "apt-get", "yum"):
             ans_builtin = "yum" if cv.cmd == "yum" else "apt"
             sub_command = cv.sub_cmd
             if sub_command == "update":
-                self.tasks.append(
+                self.container.add_task(
                     {
                         "name": "Update APT package cache",
                         f"ansible.builtin.{ans_builtin}": {"update_cache": True},
@@ -695,7 +737,7 @@ class BashScriptVisitor(ast.nodevisitor):
                     }
                 )
             elif sub_command == "upgrade":
-                self.tasks.append(
+                self.container.add_task(
                     {
                         "name": "Upgrade all packages",
                         f"ansible.builtin.{ans_builtin}": {"upgrade": "dist"},
@@ -704,7 +746,7 @@ class BashScriptVisitor(ast.nodevisitor):
                 )
             elif sub_command == "install":
                 packages = " ".join(cv.args)
-                self.tasks.append(
+                self.container.add_task(
                     {
                         "name": f"Install packages: {packages}",
                         f"ansible.builtin.{ans_builtin}": {
@@ -721,7 +763,7 @@ class BashScriptVisitor(ast.nodevisitor):
                 redir_type = cv.redir_type
                 redir_file = self.interpret_variable(cv.redir_file)
                 if redir_type == ">":
-                    self.tasks.append(
+                    self.container.add_task(
                         {
                             "name": f"Write text to {redir_file}",
                             "ansible.builtin.copy": {
@@ -733,7 +775,7 @@ class BashScriptVisitor(ast.nodevisitor):
                     )
                 else:  # >>
                     mode = self.umask_to_mode(is_dir=False)
-                    self.tasks.append(
+                    self.container.add_task(
                         {
                             "name": self.interpret_variable(
                                 f"Append text to {redir_file}"
@@ -750,7 +792,7 @@ class BashScriptVisitor(ast.nodevisitor):
                     )
             else:
                 text = self.interpret_variable(text)
-                self.tasks.append(
+                self.container.add_task(
                     {
                         "name": f"Echo text: {text}",
                         "ansible.builtin.debug": {"msg": text},
@@ -779,9 +821,9 @@ class BashScriptVisitor(ast.nodevisitor):
         result = iv.result
         result_str = iv.result_str
 
-        print(
-            f"Test result: {result}, return code: {test_return_code}, result_str: {result_str}"
-        )
+        # print(
+        #     f"Test result: {result}, return code: {test_return_code}, result_str: {result_str}"
+        # )
         if test_return_code:
             if result:
                 when_cond = f"{self.last_register} is succeeded"
@@ -794,12 +836,12 @@ class BashScriptVisitor(ast.nodevisitor):
         body_nodes = iv.get_commands()
 
         # Visit body and add 'when' to each task generated
-        before_len = len(self.tasks)
+        before_len = len(self.container.tasks)
         for part in body_nodes:
             self.visit(part)
-        for i in range(before_len, len(self.tasks)):
+        for i in range(before_len, len(self.container.tasks)):
             if when_cond:
-                self.tasks[i]["when"] = when_cond
+                self.container.tasks[i]["when"] = when_cond
         return False
 
     def visitfor(self, n, parts):
@@ -819,7 +861,7 @@ class BashLexParser(Parser):
         """
         tasks = []
         source = ''
-        for k,v in self.get_env().items():
+        for k, v in self.get_env().items():
             source += f'{k}="{v}"\n'
         if self.file_path:
             with open(self.file_path, "r") as file:
@@ -831,4 +873,4 @@ class BashLexParser(Parser):
         visitor = BashScriptVisitor(tasks, self)
         for tree in trees:
             visitor.visit(tree)
-        return visitor.tasks
+        return visitor.container

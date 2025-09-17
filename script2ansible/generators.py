@@ -46,9 +46,11 @@ class GeneratorRole:
         tasks_dir = os.path.join(self.processor.get_output_dir(), "tasks")
         os.makedirs(tasks_dir, exist_ok=True)
         main_tasks = []
+        variables = []
         for task_container in task_containers:
             if not task_container.get_tasks():
                 continue
+            variables += task_container.variables
             tasks_name = task_container.name
             tasks = task_container.get_tasks()
             output = (
@@ -82,7 +84,10 @@ class GeneratorRole:
         )
         with open(ofile_name, "w") as f:
             f.write(output)
-
+        if len(variables):
+            vars_filename = os.path.join(self.processor.get_output_dir(), "vars","vars.yml")
+            with open(vars_filename, 'w') as outfile:
+                yaml.dump(variables, outfile, default_flow_style=False)
 
 class GeneratorRoleTasks:
     def __init__(self, processor, output_format="yaml"):

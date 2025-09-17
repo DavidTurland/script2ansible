@@ -1,5 +1,5 @@
 
-MYDIR=/opt/mydir
+export MYDIR=/opt/mydir
 MY_DIR_EXTRA=/opt/mydir/extra
 umask 0077
 mkdir -p $MYDIR

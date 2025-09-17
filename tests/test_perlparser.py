@@ -51,11 +51,11 @@ class TestPerlParser(unittest.TestCase):
 
     def test_parser(self):
         parser = PerlParser(script_string="use File::Path qw(make_path); make_path('/tmp/dir1', '/tmp/dir2');", config={})
-        tasks = parser.parse()
-        self.assertIsInstance(tasks, list)
+        taskcontainer = parser.parse()
+        self.assertIsInstance(taskcontainer.tasks, list)
         #breakpoint()  # For debugging purposes
-        self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/dir1")
-        self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/dir2")
+        self.assertEqual(taskcontainer.tasks[0]["ansible.builtin.file"]["path"], "/tmp/dir1")
+        self.assertEqual(taskcontainer.tasks[1]["ansible.builtin.file"]["path"], "/tmp/dir2")
 
     def test_parser_from_file(self):
         script_string="use File::Path qw(make_path); make_path('/tmp/dir1', '/tmp/dir2');"
@@ -63,10 +63,10 @@ class TestPerlParser(unittest.TestCase):
         with open(test_file_path, "w") as f:
             f.write(script_string)
         parser = PerlParser(file_path=test_file_path, config={})
-        tasks = parser.parse()
-        self.assertIsInstance(tasks, list)
-        self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/dir1")
-        self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/dir2")
+        taskcontainer = parser.parse()
+        self.assertIsInstance(taskcontainer.tasks, list)
+        self.assertEqual(taskcontainer.tasks[0]["ansible.builtin.file"]["path"], "/tmp/dir1")
+        self.assertEqual(taskcontainer.tasks[1]["ansible.builtin.file"]["path"], "/tmp/dir2")
 
     def test_parser_from_broke_file(self):
         script_string="""
@@ -78,7 +78,7 @@ NOPE make_path('/tmp/dir1', '/tmp/dir2');
             f.write(script_string)
         parser = PerlParser(file_path=test_file_path, config={})
         with self.assertRaises(RuntimeError) as context:
-            tasks = parser.parse()
+            taskcontainer = parser.parse()
         self.assertTrue('Bareword found' in str(context.exception))
 
     def test_calls_various(self):
@@ -89,11 +89,11 @@ rmdir '/tmp/fooby/doo';
         with open(test_file_path, "w") as f:
             f.write(script_string)
         parser = PerlParser(file_path=test_file_path, config={})
-        tasks = parser.parse()
+        taskcontainer = parser.parse()
         # breakpoint()
-        self.assertIsInstance(tasks, list)
-        self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/fooby/doo")
-        self.assertEqual(tasks[0]["ansible.builtin.file"]["state"], "absent")
+        self.assertIsInstance(taskcontainer.tasks, list)
+        self.assertEqual(taskcontainer.tasks[0]["ansible.builtin.file"]["path"], "/tmp/fooby/doo")
+        self.assertEqual(taskcontainer.tasks[0]["ansible.builtin.file"]["state"], "absent")
     
 
     # def test_parser_use(self):
@@ -111,8 +111,8 @@ rmdir '/tmp/fooby/doo';
             File::Path::remove_tree('/tmp/wibble');
             """, config={})       
         self.assertEqual(parser.instrumentation_packages,{'Org::Turland::Custom'})
-        tasks = parser.parse()
-        self.assertEqual(len(tasks),2, "just the two tasks")
+        taskcontainer = parser.parse()
+        self.assertEqual(len(taskcontainer.tasks),2, "just the two tasks")
         # self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
         # self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
 
@@ -122,12 +122,12 @@ rmdir '/tmp/fooby/doo';
             system('mv "a" "b"');
             system('uptime');
             """, config={})       
-        tasks = parser.parse()
-        self.assertEqual(len(tasks),2, "just the two tasks")
+        taskcontainer = parser.parse()
+        self.assertEqual(len(taskcontainer.tasks),2, "just the two tasks")
         # self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
         # self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
 
-    def test_parser_env_variables_simple(self):
+    def test_subprocess_env_variables_simple(self):
         script_string_file = '/tmp/script_string_file.pl'
         script_string="""
         use Env qw( $ROOT $VERBOSE HOSTNAME);
@@ -139,13 +139,13 @@ rmdir '/tmp/fooby/doo';
 
         cmd = ["perl", script_string_file]
 
-        env  = os.environ | {"ROOT": "bar",
-                             "STAGE" : "blah",
+        env  = os.environ | {"ROOT": "/",
+                             "STAGE" : "/tmp/foo",
                              "HOSTNAME" : "foo",
                              "VERBOSE" : "1",
                           }
         result = subprocess.run(cmd, capture_output=True, text=True, env = env)
-        self.assertEqual("bar 1 foo blah\n",result.stdout)
+        self.assertEqual("/ 1 foo /tmp/foo\n",result.stdout)
         os.remove(script_string_file)
 
     def test_parser_env_variables(self):
@@ -154,19 +154,19 @@ rmdir '/tmp/fooby/doo';
         system("mv ${ROOT}foo_${VERBOSE} $STAGE/bar ");
         system('uptime');
             """, config={})       
-        tasks = parser.parse()
-        self.assertEqual(len(tasks),2, "just the two tasks")
-        self.assertEqual(tasks[0]["ansible.builtin.command"], 'mv /foo_1 /tmp/s2a_stage/bar')
-        self.assertEqual(tasks[1]["ansible.builtin.command"], "uptime")
+        taskcontainer = parser.parse()
+        self.assertEqual(len(taskcontainer.tasks),2, "just the two tasks")
+        self.assertEqual(taskcontainer.tasks[0]["ansible.builtin.command"], 'mv /foo_1 /tmp/s2a_stage/bar')
+        self.assertEqual(taskcontainer.tasks[1]["ansible.builtin.command"], "uptime")
 
     def test_parser_env_variables_two(self):
         parser = PerlParser(script_string="""
         system("mv $ENV{ROOT}/foo.pl $STAGE/wibble_$ENV{VERBOSE}");
         system('uptime');
         """, config={})       
-        tasks = parser.parse()
+        taskcontainer = parser.parse()
         # breakpoint()
-        self.assertEqual(len(tasks),2, "just the two tasks")
+        self.assertEqual(len(taskcontainer.tasks),2, "just the two tasks")
         # self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
         # self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
 
@@ -177,11 +177,11 @@ rmdir '/tmp/fooby/doo';
             file_state((path => '/tmp/wobble.txt'));
             """, config={})       
         self.assertEqual(parser.instrumentation_packages,{'Org::Turland::Custom'})
-        tasks = parser.parse()
+        taskcontainer = parser.parse()
         #breakpoint()
-        self.assertEqual(len(tasks),2, "just the two tasks")
-        self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
-        self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
+        self.assertEqual(len(taskcontainer.tasks),2, "just the two tasks")
+        self.assertEqual(taskcontainer.tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
+        self.assertEqual(taskcontainer.tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
 
     def test_parser_local_package(self):
         config = {
@@ -217,11 +217,11 @@ BEGIN {
             file_state((path => '/tmp/wobble.txt'));
             """, config=config)       
         self.assertEqual(parser.instrumentation_packages,{'Org::Turland::Local','Org::Turland::Custom'})
-        tasks = parser.parse()
+        taskcontainer = parser.parse()
         #breakpoint()
-        self.assertEqual(len(tasks),2, "just the two tasks")
-        self.assertEqual(tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
-        self.assertEqual(tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
+        self.assertEqual(len(taskcontainer.tasks),2, "just the two tasks")
+        self.assertEqual(taskcontainer.tasks[0]["ansible.builtin.file"]["path"], "/tmp/wibble.txt")
+        self.assertEqual(taskcontainer.tasks[1]["ansible.builtin.file"]["path"], "/tmp/wobble.txt")
 
 if __name__ == "__main__":
     unittest.main()  # pragma: no cover

@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 import logging
 from .Parser import Parser
+from .utility import TaskContainer
 
 
 class PerlParser(Parser):
@@ -178,15 +179,16 @@ END {
     def parse(self):
         logging.info("Generating instrumented Perl script...")
         self.generate_instrumented_perl()
-        logging.info("Running instrumented Perl script...")
-        output_lines = self.run_instrumented(sys.argv[2:])
+        logging.info(f"Running instrumented Perl script {self.instrumented_path}... ")
+        output_lines = self.run_instrumented()
 
         logging.info("Perl script output:")
 
         ops = self.load_ops_log()
-        self.tasks = self.ops_to_ansible_tasks(ops)
-        logging.info(f"Parsed {len(self.tasks)} Ansible tasks from Perl ops log.")
-        return self.tasks
+        taskcontainer = TaskContainer('hmmmmm2')
+        taskcontainer.tasks = self.ops_to_ansible_tasks(ops)
+        logging.info(f"Parsed {len(taskcontainer.tasks)} Ansible tasks from Perl ops log.")
+        return taskcontainer
         # Save JSON and YAML
         # with open("ansible_tasks.json", "w") as f:
         #     json.dump(self.tasks, f, indent=2)
@@ -244,10 +246,11 @@ END {
             f.write(self.instrumented_code)
 
     # ---------- Step 2: Run instrumented.pl and capture output ----------
-    def run_instrumented(self, args):
-        cmd = ["perl", self.instrumented_path] + args
-        env=os.environ | self.get_env()
-        result = subprocess.run(cmd, capture_output=True, text=True, env = env)
+    def run_instrumented(self):
+        cmd = ["perl", self.instrumented_path]
+        env = os.environ | self.get_env()
+        env = self.get_env()
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
         stdout_lines = result.stdout.splitlines()
         if 0 != result.returncode:
             logging.error(f" failed with {result.returncode} {result.stderr}")
@@ -441,8 +444,8 @@ END {
 
 
 # ---------- Main ----------
-if __name__ == "__main__": # pragma: no cover
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s") 
+if __name__ == "__main__":  # pragma: no cover
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     if len(sys.argv) < 2:
         logging.error("Usage: process_perl.py <perl_script> [args...]")
         sys.exit(1)

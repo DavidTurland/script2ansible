@@ -46,27 +46,27 @@ ssh foo@bar ls -l
 
     def test_parse_basic_commands(self):
         parser = BashLexParser(file_path=self.test_script_path, config={})
-        tasks = parser.parse()
+        taskcontainer = parser.parse()
         # Check mkdir task
-        self.assertTrue(any(t.get("ansible.builtin.file", {}).get("state") == "directory" for t in tasks))
+        self.assertTrue(any(t.get("ansible.builtin.file", {}).get("state") == "directory" for t in taskcontainer.tasks))
         # Check touch task
-        self.assertTrue(any(t.get("ansible.builtin.file", {}).get("state") == "touch" for t in tasks))
+        self.assertTrue(any(t.get("ansible.builtin.file", {}).get("state") == "touch" for t in taskcontainer.tasks))
         # Check ln task
-        self.assertTrue(any(t.get("ansible.builtin.file", {}).get("state") in ("link", "hard") for t in tasks))
+        self.assertTrue(any(t.get("ansible.builtin.file", {}).get("state") in ("link", "hard") for t in taskcontainer.tasks))
         # Check cp task
-        self.assertTrue(any("ansible.builtin.copy" in t for t in tasks))
+        self.assertTrue(any("ansible.builtin.copy" in t for t in taskcontainer.tasks))
         # Check scp task hahahahaha
-        self.assertTrue(any("ansible.builtin.copy" in t for t in tasks))        
+        self.assertTrue(any("ansible.builtin.copy" in t for t in taskcontainer.tasks))        
         # Check ldconfig
-        self.assertTrue(any(t.get("ansible.builtin.command") == "ldconfig" for t in tasks))
+        self.assertTrue(any(t.get("ansible.builtin.command") == "ldconfig" for t in taskcontainer.tasks))
         # Check gunzip
-        self.assertTrue(any("ansible.builtin.unarchive" in t for t in tasks))
+        self.assertTrue(any("ansible.builtin.unarchive" in t for t in taskcontainer.tasks))
         # Check chmod
-        self.assertTrue(any(t.get("ansible.builtin.file", {}).get("mode") == "755" for t in tasks))
+        self.assertTrue(any(t.get("ansible.builtin.file", {}).get("mode") == "755" for t in taskcontainer.tasks))
         # Check apt/yum install
-        self.assertTrue(any("ansible.builtin.apt" in t or "ansible.builtin.yum" in t for t in tasks))
+        self.assertTrue(any("ansible.builtin.apt" in t or "ansible.builtin.yum" in t for t in taskcontainer.tasks))
         # Check echo with redirect
-        self.assertTrue(any("ansible.builtin.copy" in t or "ansible.builtin.lineinfile" in t for t in tasks))
+        self.assertTrue(any("ansible.builtin.copy" in t or "ansible.builtin.lineinfile" in t for t in taskcontainer.tasks))
 
     def test_echo_redirect(self):
         config = {}
@@ -76,15 +76,15 @@ echo "append" >> /tmp/hello.txt
 cat < output.txt
 wc -l < users       
         """, config=config)   
-        tasks = parser.parse()
+        taskcontainer = parser.parse()
         # ignore cat and wc
-        self.assertEqual(len(tasks),2)
+        self.assertEqual(len(taskcontainer.tasks),2)
 
     def test_if_result_code(self):
         parser = BashLexParser(file_path=self.test_script_path, config= {})
-        tasks = parser.parse()
+        taskcontainer = parser.parse()
         # Find the touch task with a 'when' condition
-        touch_tasks = [t for t in tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
+        touch_tasks = [t for t in taskcontainer.tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
         self.assertTrue(any("when" in t for t in touch_tasks))
         # The 'when' should reference a register and 'is succeeded' or 'is failed'
         self.assertTrue(any("is succeeded" in t.get("when", "") or "is failed" in t.get("when", "") for t in touch_tasks))
@@ -97,9 +97,9 @@ if [ $? -eq 0 ]; then
   touch /tmp/ok.txt
 fi
         """, config=config)   
-        tasks = parser.parse()
+        taskcontainer = parser.parse()
         # Find the echo task with a 'when' condition for variable comparison
-        echo_tasks = [t for t in tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
+        echo_tasks = [t for t in taskcontainer.tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
         self.assertTrue(any("when" in t for t in echo_tasks))
         # The 'when' should reference MYVAR == 'wibble'
         self.assertTrue(any("echo_redirect_append_1" in str(t.get("when", "")) and "succeeded" in str(t.get("when", "")) for t in echo_tasks))
@@ -112,9 +112,9 @@ if [ "$MYVAR" -eq "wibble" ]; then
   touch /tmp/ok.txt
 fi
         """, config=config)   
-        tasks = parser.parse()
+        taskcontainer = parser.parse()
         # Find the echo task with a 'when' condition for variable comparison
-        echo_tasks = [t for t in tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
+        echo_tasks = [t for t in taskcontainer.tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
         self.assertTrue(any("when" in t for t in echo_tasks))
         # The 'when' should reference MYVAR == 'wibble'
         self.assertTrue(any("MYVAR" in str(t.get("when", "")) and "wibble" in str(t.get("when", "")) for t in echo_tasks)) 
@@ -139,15 +139,15 @@ if [ "$MYVAR" -ge "wibble" ]; then
   touch /tmp/ok.txt
 fi                          
         """, config=config)   
-        tasks = parser.parse()
-        self.assertEqual(len(tasks),5)
-        self.assertEqual(tasks[0]['when'] ,'$MYVAR != wibble',"dest dir")
-        self.assertEqual(tasks[1]['when'] ,'$MYVAR < wibble',"dest dir")
-        self.assertEqual(tasks[2]['when'] ,'$MYVAR <= wibble',"dest dir")
-        self.assertEqual(tasks[3]['when'] ,'$MYVAR > wibble',"dest dir")
-        self.assertEqual(tasks[4]['when'] ,'$MYVAR >= wibble',"dest dir")
+        taskcontainer = parser.parse()
+        self.assertEqual(len(taskcontainer.tasks),5)
+        self.assertEqual(taskcontainer.tasks[0]['when'] ,'$MYVAR != wibble',"dest dir")
+        self.assertEqual(taskcontainer.tasks[1]['when'] ,'$MYVAR < wibble',"dest dir")
+        self.assertEqual(taskcontainer.tasks[2]['when'] ,'$MYVAR <= wibble',"dest dir")
+        self.assertEqual(taskcontainer.tasks[3]['when'] ,'$MYVAR > wibble',"dest dir")
+        self.assertEqual(taskcontainer.tasks[4]['when'] ,'$MYVAR >= wibble',"dest dir")
         # Find the echo task with a 'when' condition for variable comparison
-        echo_tasks = [t for t in tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
+        echo_tasks = [t for t in taskcontainer.tasks if t.get("ansible.builtin.file", {}).get("path") == "/tmp/ok.txt"]
         self.assertTrue(any("when" in t for t in echo_tasks))
         # The 'when' should reference MYVAR == 'wibble'
         self.assertTrue(any("MYVAR" in str(t.get("when", "")) and "wibble" in str(t.get("when", "")) for t in echo_tasks))
@@ -161,8 +161,8 @@ do
     ln /tmp/${s}_dest.txt /tmp/bar_${s}_src
 done
             """, config=config)   
-        tasks = parser.parse()
-        self.assertTrue(len(tasks),6)
+        taskcontainer = parser.parse()
+        self.assertTrue(len(taskcontainer.tasks),6)
         # Find the echo task with a 'when' condition for variable comparison
         #echo_tasks = [t for t in tasks if t.get("ansible.builtin.debug", {}).get("msg") == "matched"]
         #self.assertTrue(any("when" in t for t in echo_tasks))
@@ -180,10 +180,10 @@ scp -r ./myfolder user@host:/remote/path/
 scp -P 2222 file.txt user@10.0.0.1:/home/user/
 scp -i ~/.ssh/id_rsa -P 2200 -r ./dir host:/var/tmp/
             """, config=config)   
-        tasks = parser.parse()
-        self.assertTrue(len(tasks),5)
-        self.assertEqual(tasks[1]['ansible.builtin.copy']['dest'] ,'/path/to/remote/directory/',"dest dir")
-        self.assertEqual(tasks[2]['ansible.builtin.copy']['dest'] ,'/remote/path/',"dest dir")
+        taskcontainer = parser.parse()
+        self.assertTrue(len(taskcontainer.tasks),5)
+        self.assertEqual(taskcontainer.tasks[1]['ansible.builtin.copy']['dest'] ,'/path/to/remote/directory/',"dest dir")
+        self.assertEqual(taskcontainer.tasks[2]['ansible.builtin.copy']['dest'] ,'/remote/path/',"dest dir")
 
         # Find the echo task with a 'when' condition for variable comparison
         #echo_tasks = [t for t in tasks if t.get("ansible.builtin.debug", {}).get("msg") == "matched"]
@@ -202,10 +202,10 @@ scp -r                           ./myfolder              user@host:/remote/path/
 scp -P 2222                      file.txt                user@10.0.0.1:/home/user/
 scp -i ~/.ssh/id_rsa -P 2200 -r ./dir                    host:/var/tmp2/
             """, config=config)   
-        tasks = parser.parse()
-        self.assertEqual(len(tasks),5)
-        self.assertEqual(tasks[1]['ansible.builtin.copy']['dest'] ,'/remote/path2/',"dest dir")
-        self.assertEqual(tasks[2]['ansible.builtin.copy']['dest'] ,'/remote/path/',"dest dir")
+        taskcontainer = parser.parse()
+        self.assertEqual(len(taskcontainer.tasks),5)
+        self.assertEqual(taskcontainer.tasks[1]['ansible.builtin.copy']['dest'] ,'/remote/path2/',"dest dir")
+        self.assertEqual(taskcontainer.tasks[2]['ansible.builtin.copy']['dest'] ,'/remote/path/',"dest dir")
 
     def test_scp_simple_just_pull(self):
         config = {"pull" : True,
@@ -218,10 +218,10 @@ scp -r                           ./myfolder              user@host:/remote/path/
 scp -P 2222                      file.txt                user@10.0.0.1:/home/user/
 scp -i ~/.ssh/id_rsa -P 2200 -r ./dir                    host:/var/tmp2/
             """, config=config)   
-        tasks = parser.parse()
-        self.assertEqual(len(tasks),2)
-        self.assertEqual(tasks[0]['ansible.builtin.copy']['dest'] ,'/var/tmp/',"dest dir")
-        self.assertEqual(tasks[1]['ansible.builtin.copy']['dest'] ,'/path/to/remote/directory/',"dest dir")
+        taskcontainer = parser.parse()
+        self.assertEqual(len(taskcontainer.tasks),2)
+        self.assertEqual(taskcontainer.tasks[0]['ansible.builtin.copy']['dest'] ,'/var/tmp/',"dest dir")
+        self.assertEqual(taskcontainer.tasks[1]['ansible.builtin.copy']['dest'] ,'/path/to/remote/directory/',"dest dir")
 
     def test_split_host(self):
         bv = BashScriptVisitor(tasks=None,parser=None)
@@ -244,6 +244,20 @@ scp -i ~/.ssh/id_rsa -P 2200 -r ./dir                    host:/var/tmp2/
                                  'recursive': False, 
                                  'user': 'wibble'})
         # bv.umask_to_mode()
+    def test_export(self):
+        config = {}
+        parser = BashLexParser(script_string="""
+BAR=squawk
+export FOO=wibble_${BAR}
+touch /tmp/${FOO}.txt
+touch /tmp/${BAR}.txt
+        """, config=config)   
+        taskcontainer = parser.parse()
+        # breakpoint()
+        self.assertEqual(len(taskcontainer.tasks),2)
+        self.assertEqual(taskcontainer.tasks[0]['ansible.builtin.file']['path'] ,'/tmp/{{ FOO }}.txt',"path from export var")
+        self.assertEqual(taskcontainer.tasks[1]['ansible.builtin.file']['path'] ,'/tmp/squawk.txt',"path from export var")
+        # self.assertEqual(tasks[1]['ansible.builtin.file']['mode'] ,'0644',"dest dir")
 
     def test_umask(self):
         config = {}
@@ -255,20 +269,43 @@ touch /tmp/bar.txt
 MY_UMASK=0027
 umask $MY_UMASK
 touch /tmp/bar_foo.txt
+export EXPORTED_UMASK=0777
+umask $EXPORTED_UMASK
+touch /tmp/bar_groob.txt                               
         """, config=config)   
-        tasks = parser.parse()
-        # breakpoint()
-        self.assertEqual(len(tasks),3)
-        self.assertEqual(tasks[0]['ansible.builtin.file']['mode'] ,'0600',"dest dir")
-        self.assertEqual(tasks[1]['ansible.builtin.file']['mode'] ,'0644',"dest dir")
-        # BUG:
-        # self.current_umask is set to $MY_UMASK
-        # umask_to_mode fails to int('$MY_UMASK', 8)
-        # maybe, file:
-        # " {{ 666 - MY_UMASK }}"
-        # maybe, dir:
-        # " {{ 777 - MY_UMASK }}"        
-        self.assertEqual(tasks[2]['ansible.builtin.file']['mode'] ,'0640',"dest dir")
+        taskcontainer = parser.parse()
+        self.assertEqual(len(taskcontainer.tasks),4)
+        self.assertEqual(taskcontainer.tasks[0]['ansible.builtin.file']['mode'] ,'0600',"dest dir")
+        self.assertEqual(taskcontainer.tasks[1]['ansible.builtin.file']['mode'] ,'0644',"dest dir") 
+        self.assertEqual(taskcontainer.tasks[2]['ansible.builtin.file']['mode'] ,'0640',"dest dir")
+        # until we can compute mode from umask as a jinja template this
+        # will be interpreted 
+        self.assertEqual(taskcontainer.tasks[3]['ansible.builtin.file']['mode'] ,'0000',"dest dir")
 
+    def test_variables(self):
+      tasks = []
+      parser = None
+      bsv = BashScriptVisitor(tasks,parser)
+      # export FOO="-foo-"
+      # rendered(jinja)     : "-foo-"
+      # rendered(interpret) : "-foo-"
+      bsv.set_variable('FOO', '-foo-',export=True)
+      value = bsv.get_variable('FOO')
+      rendered = bsv.interpret_variable(value)
+      self.assertEqual(rendered,"-foo-","rendered FOO")
+
+      # BAR="flannel_${FOO}"
+      # rendered(jinja)     : "flannel_{{ FOO }}"
+      # rendered(interpret) : "flannel_-foo-"
+      bsv.set_variable('BAR', 'flannel_${FOO}')
+      value = bsv.get_variable('BAR')
+      rendered = bsv.interpret_variable(value,type='jinja')
+      self.assertEqual(rendered,"flannel_-foo-","rendered BAR")
+      # all non-exported variables are non-jinja
+      # self.assertEqual(rendered,"flannel_{{ FOO }}","rendered BAR")
+      rendered = bsv.interpret_variable(value)
+      self.assertEqual(rendered,"flannel_-foo-","rendered BAR")
+      # all non-exported variables are non-jinja
+      # self.assertEqual(rendered,"flannel_{{ FOO }}","rendered BAR")
 if __name__ == "__main__":
     unittest.main()  # pragma: no cover

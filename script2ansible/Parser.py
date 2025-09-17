@@ -31,9 +31,9 @@ class Parser:
 
     def get_env(self):
         return {"ROOT": self.root,
-                "STAGE" : self.stage,
-                "HOSTNAME" : self.hostname,
-                "VERBOSE" : self.verbose,
+                "STAGE": self.stage,
+                "HOSTNAME": self.hostname,
+                "VERBOSE": '1' if self.verbose else '0',
                 }
 
     def validate_command(self, command={}):

@@ -3,29 +3,9 @@ import sys
 import glob
 from .parsers import ParserFactory
 from .generators import GeneratorFactory
+from .utility import TaskContainer
 import shutil
 import logging
-
-
-class TaskContainer:
-    """
-    could be a playbook, could be a role task file
-    """
-    def __init__(self, name):
-        self.name = name
-        self.tasks = []
-
-    def add_task(self, task):
-        self.tasks.append(task)
-
-    def get_tasks(self):
-        return self.tasks
-
-    def clear_tasks(self):
-        self.tasks = []
-
-    def empty(self):
-        return len(self.tasks) == 0
 
 
 class Processor:
@@ -174,12 +154,13 @@ class SlackRoleProcessor(Processor):
         for fname in ("fixfiles", "preinstall", "postinstall"):
             script_name = os.path.join(script_dir, fname)
             if os.path.isfile(script_name):
-                task_container = TaskContainer(fname)
+                # task_container = TaskContainer(fname)
                 logging.info(f"{script_name} found, processing...")
                 parser = ParserFactory.get_parser(
                     file_path=script_name, config=self.config
                 )
-                task_container.tasks = parser.parse()
+                task_container = parser.parse()
+                task_container.name = fname
                 self.task_containers.append(task_container)
         generator = GeneratorFactory.build_generator(
             self.config["generator"], self, self.config.get("output_format", "yaml")
@@ -200,10 +181,11 @@ class ScriptProcessor(Processor):
 
     def process(self):
         self.task_containers = []
-        self.tasks = []
-        task_container = TaskContainer("bash_script")
+        # self.tasks = []
+        # task_container = TaskContainer("bash_script")
         parser = ParserFactory.get_parser(file_path=self.file_name, config=self.config)
-        task_container.tasks = parser.parse()
+        task_container = parser.parse()
+        task_container.name = "bash_script"
         self.task_containers.append(task_container)
         generator = GeneratorFactory.build_generator(
             self.config["generator"], self, self.config.get("output_format", "yaml")

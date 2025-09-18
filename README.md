@@ -15,9 +15,9 @@ Also knows how to translate slack (https://github.com/jeviolle/slack) roles into
 - 'files' and their required movement are correctly translated to role 'files', with a corresponding task file to copy them
 
 ## This is a Work-in-progress 
-Mainly because of these issues:
+Mainly because of these blocking issues:
 
-[ ] Safe analysis of perl scripts [#5]
+- [ ] Safe analysis of perl scripts [#5](/../../issues/3) 
 
 
 # Interesting issues

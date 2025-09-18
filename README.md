@@ -17,7 +17,7 @@ Also knows how to translate slack (https://github.com/jeviolle/slack) roles into
 ## This is a Work-in-progress 
 Mainly because of these blocking issues:
 
-- [ ] Safe analysis of perl scripts [#5](/../../issues/3) 
+- [ ] Safe analysis of perl scripts [#5](/../../issues/5) 
 
 
 # Interesting issues

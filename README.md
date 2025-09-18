@@ -14,8 +14,13 @@ Also knows how to translate slack (https://github.com/jeviolle/slack) roles into
 - 'scripts' can be either bash or perl
 - 'files' and their required movement are correctly translated to role 'files', with a corresponding task file to copy them
 
-# This is a Work-in-progress 
-Because many reasons, including:
+## This is a Work-in-progress 
+Mainly because of these issues:
+
+[ ] Safe analysis of perl scripts [#5]
+
+
+# Interesting issues
 ## Operation locality: push vs pull 
 
 The scripts:
@@ -51,11 +56,9 @@ which should probably map to the ansible task( run from remote.host):
 ```
 
 
-
-
 # Supported Script Operations
 
-# bash
+## bash
 note:
 
 Bash scripts are `visited` using [bashlex](https://github.com/idank/bashlex/blob/master/README.md) so:
@@ -63,7 +66,7 @@ Bash scripts are `visited` using [bashlex](https://github.com/idank/bashlex/blob
 - environment variables need to be simulated
 
 
-## Operations:
+### Operations:
 variable assignment and reference
 variables are currently updated and interpreted on the fly
 

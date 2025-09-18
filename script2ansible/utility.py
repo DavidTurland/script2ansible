@@ -4,21 +4,33 @@ class TaskContainer:
     """
     def __init__(self, name):
         self.name = name
-        self.tasks = []
-        self.variables = []
+        self._tasks = []
+        self._variables = []
 
     def add_variable(self, key, value):
-        # breakpoint()
-        self.variables.append({key: value})
+        self._variables.append({key: value})
+
+    @property
+    def variables(self):
+        return self._variables
+    
+    @variables.setter 
+    def variables(self,vegetables):
+         self._variables = vegetables
+
+    @property
+    def tasks(self):
+        return self._tasks
+    
+    @tasks.setter
+    def tasks(self,tusks):
+         self._tasks = tusks
 
     def add_task(self, task):
-        self.tasks.append(task)
-
-    def get_tasks(self):
-        return self.tasks
+        self._tasks.append(task)
 
     def clear_tasks(self):
-        self.tasks = []
+        self._tasks = []
 
     def empty(self):
-        return len(self.tasks) == 0
+        return len(self._tasks) == 0

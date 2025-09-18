@@ -170,7 +170,7 @@ class CommandVisitor(ast.nodevisitor):
             },
             "export": {
                 "ov": set(),
-                "o": set(),
+                "o": {"-p"},
             },
             "mkdir": {
                 "ov": set(),

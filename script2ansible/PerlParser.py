@@ -37,50 +37,58 @@ BEGIN {
         my ($fh, $mode, $file, @rest) = @_;
         log_op("file_open", file => $file, mode => $mode, rest => \@rest);
         # If $fh is a string, convert to symbol ref
-        if (!ref $fh) {
-            no strict 'refs';
-            return CORE::open(*{$fh},  $mode, $file, @rest);
-        } else {
-            return CORE::open($fh,  $mode, $file, @rest);
-        }
+        #if (!ref $fh) {
+        #    no strict 'refs';
+        #    return CORE::open(*{$fh},  $mode, $file, @rest);
+        #} else {
+        #    return CORE::open($fh,  $mode, $file, @rest);
+        #}
+        return;
     };
     *CORE::GLOBAL::close = sub (*) {
         my ($fh) = @_;
         log_op("file_close", fh => $fh);
         # TODO:
         # maybe close, do something with the file?
-        return CORE::close($fh);
+        #return CORE::close($fh);
+        return;
     };
     *CORE::GLOBAL::rename = sub {
         my ($from, $to) = @_;
         log_op("file_rename", from => $from, to => $to);
-        return CORE::rename($from, $to);
+        #return CORE::rename($from, $to);
+        return;
     };
     *CORE::GLOBAL::unlink = sub {
         my @files = @_;
         log_op("file_delete", files => \@files);
-        return CORE::unlink(@files);
+        #return CORE::unlink(@files);
+        return;
     };
     *CORE::GLOBAL::system = sub {
         my @args = @_;
         log_op("system_call", args => \@args);
         # TODO: defang all destructive calls
         # return CORE::system(@args);
+        return;
     };
     *CORE::GLOBAL::exec = sub {
         my @args = @_;
         log_op("exec_call", args => \@args);
-        return CORE::exec(@args);
+        #return CORE::exec(@args);
+        return;
     };
     *CORE::GLOBAL::mkdir = sub {
         my ($dir, $mode) = @_;
         log_op("mkdir", dir => $dir, mode => $mode);
-        return CORE::mkdir($dir, $mode);
+        # return CORE::mkdir($dir, $mode);
+        return;
     };
     *CORE::GLOBAL::rmdir = sub {
         my ($dir) = @_;
         log_op("rmdir", dir => $dir);
-        return CORE::rmdir($dir);
+        # return CORE::rmdir($dir);
+        return;
     };
     # Wrap File::Path::make_path
     {
